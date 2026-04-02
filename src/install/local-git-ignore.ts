@@ -1,12 +1,5 @@
 import { execFile } from "node:child_process";
-import {
-  access,
-  lstat,
-  mkdir,
-  readFile,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { lstat, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -273,17 +266,25 @@ async function resolveGitDir(
     }
 
     return null;
-  } catch {
-    return null;
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return null;
+    }
+
+    throw error;
   }
 }
 
 async function readOptionalFile(filePath: string): Promise<string> {
   try {
-    await access(filePath);
     return await readFile(filePath, "utf8");
-  } catch {
-    return "";
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return "";
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to read ${filePath}: ${message}`);
   }
 }
 

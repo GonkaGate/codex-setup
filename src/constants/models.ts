@@ -1,3 +1,4 @@
+import { CONTRACT_METADATA } from "../../contract-metadata.js";
 import {
   GONKAGATE_MODEL_CATALOG,
   type ModelCatalog,
@@ -12,15 +13,8 @@ export interface SupportedModelDefinition {
   isDefault?: boolean;
 }
 
-const curatedModelRegistry = [
-  {
-    key: "gpt-5.4",
-    displayName: "GPT-5.4",
-    modelId: "gpt-5.4",
-    description: "Current validated GonkaGate model for Codex CLI.",
-    isDefault: true,
-  },
-] as const satisfies readonly SupportedModelDefinition[];
+const curatedModelRegistry =
+  CONTRACT_METADATA.supportedModels satisfies readonly SupportedModelDefinition[];
 
 const defaultModels = curatedModelRegistry.filter((model) => model.isDefault);
 
@@ -73,11 +67,8 @@ export function getCatalogEntryForModel(modelId: string): ModelCatalogEntry {
 }
 
 export function createCuratedModelCatalog(): ModelCatalog {
-  const modelIds = new Set<string>(
-    SUPPORTED_MODELS.map((model) => model.modelId),
-  );
-  const models = GONKAGATE_MODEL_CATALOG.models.filter((entry) =>
-    modelIds.has(entry.slug),
+  const models = SUPPORTED_MODELS.map((model) =>
+    getCatalogEntryForModel(model.modelId),
   );
 
   if (models.length === 0) {

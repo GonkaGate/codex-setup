@@ -1,168 +1,220 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { CONTRACT_METADATA } from "../contract-metadata.js";
+import {
+  GONKAGATE_BASE_URL,
+  GONKAGATE_PROVIDER_ID,
+} from "../src/constants/gateway.js";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
+const mirroredSkillDirectories = [
+  "codex-compatibility-audit",
+  "coding-prompt-normalizer",
+  "technical-design-review",
+  "typescript-coder",
+  "verification-before-completion",
+] as const;
 
-function readText(relativePath: string) {
+function readText(relativePath: string): string {
   return readFileSync(resolve(repoRoot, relativePath), "utf8");
 }
 
-test("required repository files exist", () => {
-  const requiredFiles = [
-    "AGENTS.md",
-    ".agents/skills/codex-compatibility-audit/SKILL.md",
-    ".claude/skills/codex-compatibility-audit/SKILL.md",
-    ".agents/skills/technical-design-review/SKILL.md",
-    ".agents/skills/typescript-coder/SKILL.md",
-    ".agents/skills/verification-before-completion/SKILL.md",
-    ".editorconfig",
-    ".claude/skills/technical-design-review/SKILL.md",
-    ".claude/skills/typescript-coder/SKILL.md",
-    ".claude/skills/verification-before-completion/SKILL.md",
-    ".github/workflows/ci.yml",
-    ".github/workflows/publish.yml",
-    ".github/workflows/release-please.yml",
-    ".nvmrc",
-    "README.md",
-    "CHANGELOG.md",
-    "docs/how-it-works.md",
-    "docs/security.md",
-    "docs/troubleshooting.md",
-    "bin/gonkagate-codex.js",
-    "package.json",
-    "release-please-config.json",
-    "scripts/extract-model-catalog.mjs",
-    "scripts/run-tests.mjs",
-    "src/cli.ts",
-    "src/install/install-use-case.ts",
-    "src/install/codex-config.ts",
-    "src/constants/model-catalog.ts",
-    "test/install-use-case.test.ts",
-  ];
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
-  for (const relativePath of requiredFiles) {
-    assert.ok(
-      existsSync(resolve(repoRoot, relativePath)),
-      `Expected ${relativePath} to exist.`,
+function listRelativeFiles(rootPath: string): string[] {
+  return readdirSync(rootPath, {
+    recursive: true,
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isFile())
+    .map((entry) => relative(rootPath, resolve(entry.parentPath, entry.name)))
+    .sort();
+}
+
+function assertMatchesAll(text: string, patterns: readonly RegExp[]): void {
+  for (const pattern of patterns) {
+    assert.match(text, pattern);
+  }
+}
+
+function assertMirroredSkillDirectory(skillDirectory: string): void {
+  const agentRoot = resolve(repoRoot, ".agents/skills", skillDirectory);
+  const claudeRoot = resolve(repoRoot, ".claude/skills", skillDirectory);
+
+  assert.equal(existsSync(agentRoot), true, `Missing ${agentRoot}`);
+  assert.equal(existsSync(claudeRoot), true, `Missing ${claudeRoot}`);
+
+  const agentFiles = listRelativeFiles(agentRoot);
+  const claudeFiles = listRelativeFiles(claudeRoot);
+  assert.deepEqual(claudeFiles, agentFiles);
+
+  for (const relativePath of agentFiles) {
+    assert.equal(
+      readFileSync(resolve(agentRoot, relativePath), "utf8"),
+      readFileSync(resolve(claudeRoot, relativePath), "utf8"),
     );
   }
-});
+}
 
 test("package metadata matches the installer contract", () => {
   const packageJson = JSON.parse(readText("package.json")) as {
-    name: string;
-    type: string;
     bin: Record<string, string>;
+    name: string;
     scripts: Record<string, string>;
+    type: string;
+    version: string;
   };
 
-  assert.equal(packageJson.name, "@gonkagate/codex-setup");
+  assert.equal(packageJson.name, CONTRACT_METADATA.packageName);
   assert.equal(packageJson.type, "module");
-  assert.equal(packageJson.bin["gonkagate-codex"], "bin/gonkagate-codex.js");
+  assert.equal(packageJson.version, CONTRACT_METADATA.cliVersion);
+  assert.equal(
+    packageJson.bin[CONTRACT_METADATA.binName],
+    CONTRACT_METADATA.binPath,
+  );
+  assert.match(
+    packageJson.scripts["model-catalog:generate"],
+    /scripts\/extract-model-catalog\.mjs/,
+  );
+  assert.match(
+    packageJson.scripts["model-catalog:check"],
+    /scripts\/check-model-catalog\.mjs/,
+  );
   assert.match(packageJson.scripts.test, /npm run build/);
   assert.match(packageJson.scripts.ci, /npm run typecheck/);
   assert.match(packageJson.scripts.ci, /npm run test/);
+  assert.match(packageJson.scripts.ci, /npm run model-catalog:check/);
   assert.match(packageJson.scripts.ci, /npm run package:check/);
 });
 
 test("README captures the current Codex installer decisions", () => {
   const readme = readText("README.md");
 
-  assert.match(readme, /~\/\.codex\/config\.toml/);
-  assert.match(readme, /\.codex\/config\.toml/);
-  assert.match(readme, /trusted projects?/i);
-  assert.match(readme, /wire_api = "responses"/);
-  assert.match(readme, /model_catalog_json/);
-  assert.match(readme, /command-backed bearer token/i);
-  assert.match(readme, /gpt-5\.4/);
-  assert.match(readme, /0\.118\.0/);
+  assertMatchesAll(readme, [
+    new RegExp(escapeRegExp(CONTRACT_METADATA.publicEntrypoint)),
+    /~\/\.codex\/config\.toml/,
+    /\.codex\/config\.toml/,
+    new RegExp(escapeRegExp(`model_provider = "${GONKAGATE_PROVIDER_ID}"`)),
+    new RegExp(escapeRegExp(GONKAGATE_BASE_URL)),
+    /wire_api = "responses"/,
+    /model_catalog_json/,
+    /command-backed bearer token/i,
+    new RegExp(escapeRegExp(CONTRACT_METADATA.verifiedCodex.minVersion)),
+  ]);
+
+  for (const model of CONTRACT_METADATA.supportedModels) {
+    assert.match(readme, new RegExp(escapeRegExp(model.modelId)));
+  }
 });
 
-test("AGENTS captures the repository contract", () => {
+test("AGENTS captures the repository contract anchors", () => {
   const agents = readText("AGENTS.md");
 
-  assert.match(agents, /@gonkagate\/codex-setup/);
-  assert.match(agents, /src\/cli\.ts/);
-  assert.match(agents, /~\/\.codex\/config\.toml/);
-  assert.match(agents, /\.codex\/config\.toml/);
-  assert.match(agents, /wire_api = "responses"/);
-  assert.match(agents, /auth\.json/);
-  assert.match(agents, /installer is implemented/i);
-  assert.match(agents, /0\.118\.0/);
+  assertMatchesAll(agents, [
+    new RegExp(escapeRegExp(CONTRACT_METADATA.packageName)),
+    /src\/cli\.ts/,
+    /~\/\.codex\/config\.toml/,
+    /\.codex\/config\.toml/,
+    new RegExp(escapeRegExp(`model_provider = "${GONKAGATE_PROVIDER_ID}"`)),
+    /wire_api = "responses"/,
+    /auth\.json/,
+    /installer is implemented/i,
+    new RegExp(escapeRegExp(CONTRACT_METADATA.verifiedCodex.minVersion)),
+  ]);
 });
 
-test("coding-prompt-normalizer is adapted to codex-setup", () => {
-  const skill = readText(".claude/skills/coding-prompt-normalizer/SKILL.md");
+test("implementation docs capture current install and troubleshooting anchors", () => {
+  const howItWorks = readText("docs/how-it-works.md");
+  const troubleshooting = readText("docs/troubleshooting.md");
+
+  assertMatchesAll(howItWorks, [
+    new RegExp(escapeRegExp(CONTRACT_METADATA.publicEntrypoint)),
+    new RegExp(escapeRegExp(CONTRACT_METADATA.verifiedCodex.minVersion)),
+    /wire_api = "responses"/,
+    /model_catalog_json/,
+  ]);
+
+  assertMatchesAll(troubleshooting, [
+    new RegExp(escapeRegExp(CONTRACT_METADATA.verifiedCodex.minVersion)),
+    /openai_base_url/,
+    /projects\."\s*<abs-path>\s*"\.trust_level = "trusted"|projects\."\<abs-path\>"\.trust_level = "trusted"/,
+    /wire_api = "responses"/,
+    /\.codex\/config\.toml/,
+  ]);
+});
+
+test("security docs capture the secret-handling constraints", () => {
+  const security = readText("docs/security.md");
+
+  assertMatchesAll(security, [
+    /auth\.json/,
+    /owner-only permissions/i,
+    /~\/\.codex/,
+    /\.git\/info\/exclude/,
+  ]);
+});
+
+test("mirrored skill assets stay aligned across .agents and .claude", () => {
+  for (const skillDirectory of mirroredSkillDirectories) {
+    assertMirroredSkillDirectory(skillDirectory);
+  }
+});
+
+test("coding-prompt-normalizer stays adapted to codex-setup", () => {
+  const skill = readText(".agents/skills/coding-prompt-normalizer/SKILL.md");
   const repoRouting = readText(
-    ".claude/skills/coding-prompt-normalizer/references/repo-context-routing.md",
+    ".agents/skills/coding-prompt-normalizer/references/repo-context-routing.md",
   );
   const normalization = readText(
-    ".claude/skills/coding-prompt-normalizer/references/input-normalization.md",
+    ".agents/skills/coding-prompt-normalizer/references/input-normalization.md",
   );
 
-  assert.match(skill, /codex-setup/);
-  assert.match(skill, /~\/\.codex\/config\.toml/);
-  assert.match(skill, /installer runtime under `src\/`/);
-  assert.doesNotMatch(skill, /there is currently no `src\/`/);
-  assert.doesNotMatch(skill, /openclaw-setup/);
-  assert.doesNotMatch(skill, /~\/\.openclaw\/openclaw\.json/);
-
-  assert.match(repoRouting, /implemented TypeScript\/Node installer/i);
-  assert.match(repoRouting, /src\/install\//);
-  assert.match(repoRouting, /npx @gonkagate\/codex/);
-  assert.doesNotMatch(repoRouting, /npx @gonkagate\/openclaw/);
-
-  assert.match(normalization, /wire_api = "responses"/);
-  assert.match(normalization, /auth\.json/);
-  assert.doesNotMatch(normalization, /openclaw setup/);
+  assertMatchesAll(skill, [
+    /codex-setup/,
+    /~\/\.codex\/config\.toml/,
+    /installer runtime under `src\/`/,
+    new RegExp(escapeRegExp(CONTRACT_METADATA.publicEntrypoint)),
+  ]);
+  assertMatchesAll(repoRouting, [
+    /implemented TypeScript\/Node installer/i,
+    /src\/install\//,
+    new RegExp(escapeRegExp(CONTRACT_METADATA.publicEntrypoint)),
+  ]);
+  assertMatchesAll(normalization, [
+    /wire_api = "responses"/,
+    /auth\.json/,
+    /test\/scaffold\.test\.ts/,
+  ]);
 });
 
 test("codex-compatibility-audit targets latest Codex CLI contracts", () => {
   const agentSkill = readText(
     ".agents/skills/codex-compatibility-audit/SKILL.md",
   );
-  const claudeSkill = readText(
-    ".claude/skills/codex-compatibility-audit/SKILL.md",
-  );
   const reportTemplate = readText(
     ".agents/skills/codex-compatibility-audit/references/report-template.md",
   );
 
-  assert.equal(claudeSkill, agentSkill);
-  assert.match(agentSkill, /@openai\/codex/);
-  assert.match(agentSkill, /latest stable/i);
-  assert.match(
-    agentSkill,
+  assertMatchesAll(agentSkill, [
+    /@openai\/codex/,
+    /latest stable/i,
     /developers\.openai\.com\/codex\/config-reference\//,
-  );
-  assert.match(
-    agentSkill,
     /developers\.openai\.com\/codex\/config-schema\.json/,
-  );
-  assert.match(
-    agentSkill,
     /api\.github\.com\/repos\/openai\/codex\/releases\/latest/,
-  );
-  assert.match(agentSkill, /projects\."\<path\>"\.trust_level/);
-  assert.doesNotMatch(agentSkill, /OpenClaw|openclaw/i);
+    /projects\."\<path\>"\.trust_level/,
+  ]);
+  assert.doesNotMatch(agentSkill, /openclaw/i);
   assert.match(reportTemplate, /Prerelease Watchlist/);
 });
 
-test("security docs capture the secret-handling constraints", () => {
-  const security = readText("docs/security.md");
-
-  assert.match(security, /auth\.json/);
-  assert.match(security, /owner-only permissions/i);
-  assert.match(security, /~\/\.codex/);
-  assert.match(security, /\.git\/info\/exclude/);
-});
-
 test("CLI wrapper exposes the implemented installer entrypoint", () => {
-  const binPath = resolve(repoRoot, "bin/gonkagate-codex.js");
+  const binPath = resolve(repoRoot, CONTRACT_METADATA.binPath);
   const helpResult = spawnSync(process.execPath, [binPath, "--help"], {
     cwd: repoRoot,
     encoding: "utf8",
@@ -172,6 +224,10 @@ test("CLI wrapper exposes the implemented installer entrypoint", () => {
   assert.match(helpResult.stdout, /GonkaGate Codex CLI installer/i);
   assert.match(helpResult.stdout, /--scope <scope>/);
   assert.match(helpResult.stdout, /--model <model-key>/);
+  assert.match(
+    helpResult.stdout,
+    new RegExp(escapeRegExp(CONTRACT_METADATA.publicEntrypoint)),
+  );
 
   const versionResult = spawnSync(process.execPath, [binPath, "--version"], {
     cwd: repoRoot,
@@ -179,5 +235,8 @@ test("CLI wrapper exposes the implemented installer entrypoint", () => {
   });
 
   assert.equal(versionResult.status, 0);
-  assert.match(versionResult.stdout, /0\.1\.0/);
+  assert.match(
+    versionResult.stdout,
+    new RegExp(escapeRegExp(CONTRACT_METADATA.cliVersion)),
+  );
 });

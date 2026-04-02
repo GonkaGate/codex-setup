@@ -9,6 +9,11 @@
   user and local scope handling, backups, and local git safety.
 - Added runtime tests for config writing, tracked local config fallback, and
   secret-preserving backup behavior.
+- Refactored config planning so scope-to-layer ownership is centralized and
+  TOML no-op detection now lives in the managed-write seam.
+- Added explicit `model-catalog:generate` and `model-catalog:check` workflows,
+  a committed model-catalog source snapshot, and drift checks for the generated
+  curated catalog module.
 - Updated `README.md`, `docs/`, and repository contract files to describe the
   implemented installer rather than the earlier scaffold-only state.
 

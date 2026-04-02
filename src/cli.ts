@@ -1,11 +1,13 @@
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { Command, CommanderError, Option } from "commander";
+import { CONTRACT_METADATA } from "../contract-metadata.js";
 import {
   DEFAULT_MODEL_KEY,
   SUPPORTED_MODELS,
   SUPPORTED_MODEL_KEYS,
 } from "./constants/models.js";
+import { GONKAGATE_BASE_URL } from "./constants/gateway.js";
 import {
   runInstallUseCase,
   type InstallOutcome,
@@ -44,7 +46,7 @@ function createProgram(output?: ProgramOutput): Command {
   }).join("\n");
 
   const program = new Command()
-    .name("gonkagate-codex")
+    .name(CONTRACT_METADATA.binName)
     .description("GonkaGate Codex CLI installer")
     .addOption(
       new Option(
@@ -59,14 +61,18 @@ function createProgram(output?: ProgramOutput): Command {
       ).choices(["user", "local"]),
     )
     .helpOption("-h, --help", "Show this help.")
-    .version("0.1.0", "-v, --version", "Show the package version.")
+    .version(
+      CONTRACT_METADATA.cliVersion,
+      "-v, --version",
+      "Show the package version.",
+    )
     .addHelpText(
       "after",
       `
 Examples:
-  npx @gonkagate/codex-setup
-  npx @gonkagate/codex-setup --scope local
-  npx @gonkagate/codex-setup --model ${DEFAULT_MODEL_KEY}
+  ${CONTRACT_METADATA.publicEntrypoint}
+  ${CONTRACT_METADATA.publicEntrypoint} --scope local
+  ${CONTRACT_METADATA.publicEntrypoint} --model ${DEFAULT_MODEL_KEY}
 
 Supported model keys:
 ${supportedModelLines}
@@ -88,7 +94,7 @@ export function parseCliOptions(
   rejectApiKeyArgs(argv);
 
   const program = createProgram(output);
-  program.parse(["node", "gonkagate-codex", ...argv]);
+  program.parse(["node", CONTRACT_METADATA.binName, ...argv]);
 
   const options = program.opts<ParsedProgramOptions>();
   return {
@@ -104,7 +110,7 @@ function printIntro(): void {
   console.log(
     "This installer writes the minimum safe Codex config and keeps the secret under ~/.codex only.",
   );
-  console.log("Base URL is fixed to https://api.gonkagate.com/v1.");
+  console.log(`Base URL is fixed to ${GONKAGATE_BASE_URL}.`);
   console.log(
     `Curated model choice: ${SUPPORTED_MODELS.map((model) => model.key).join(", ")}.\n`,
   );

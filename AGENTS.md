@@ -107,6 +107,10 @@ These are implementation facts today, not future plans:
   - `<project-root>/.codex/config.toml` for local scope only
 - the current curated model catalog is derived from upstream Codex model
   metadata and currently includes `gpt-5.4`
+- `scripts/model-catalog-source.json` is the committed curated source snapshot
+  for regenerating `src/constants/model-catalog.ts`
+- `scripts/check-model-catalog.mjs` and `test/models.test.ts` guard against
+  drift between the committed source snapshot and generated catalog module
 - `test/install-use-case.test.ts` covers real file-writing behavior on temp
   filesystems and git repos
 - `test/scaffold.test.ts` protects the repository contract around docs,
@@ -164,7 +168,9 @@ This repo currently does not do:
 │   ├── security.md
 │   └── troubleshooting.md
 ├── scripts/
+│   ├── check-model-catalog.mjs
 │   ├── extract-model-catalog.mjs
+│   ├── model-catalog-source.json
 │   └── run-tests.mjs
 ├── src/
 │   ├── cli.ts
@@ -172,9 +178,12 @@ This repo currently does not do:
 │   └── install/
 ├── test/
 │   ├── cli.test.ts
+│   ├── codex-config.test.ts
 │   ├── install-use-case.test.ts
+│   ├── models.test.ts
 │   ├── scaffold.test.ts
-│   └── validate-api-key.test.ts
+│   ├── validate-api-key.test.ts
+│   └── write-managed-file.test.ts
 ├── .claude/skills/
 └── .agents/skills/
 ```
@@ -206,6 +215,16 @@ The main installer flow and public CLI behavior.
 
 Runtime implementation for prompts, TOML config merge, git safety, helper
 command generation, and managed file writes.
+
+### `scripts/extract-model-catalog.mjs`
+
+Regenerates the bundled curated model catalog from the committed source
+snapshot under `scripts/model-catalog-source.json`.
+
+### `scripts/check-model-catalog.mjs`
+
+Verifies that the committed generated model catalog still matches the source
+snapshot and generator output.
 
 ### `test/install-use-case.test.ts`
 

@@ -1,10 +1,10 @@
 import {
   DEFAULT_MODEL_KEY,
   SUPPORTED_MODELS,
+  createCuratedModelCatalog,
   requireSupportedModel,
   type SupportedModel,
   type SupportedModelKey,
-  createCuratedModelCatalog,
 } from "../constants/models.js";
 import { createBackup } from "./backup.js";
 import {
@@ -12,14 +12,17 @@ import {
   type CodexAvailability,
 } from "./codex-command.js";
 import {
-  applyLocalProjectConfig,
-  applyLocalUserConfig,
-  applyUserScopeConfig,
+  buildInstallConfigPlan,
+  getConfigTargetsForScope,
   loadTomlConfig,
   renderTomlConfig,
-  type LoadedTomlConfig,
+  type ConfigLayerTarget,
   type TomlTable,
 } from "./codex-config.js";
+import {
+  InstallCommitError,
+  type InstallRollbackFailure,
+} from "./install-errors.js";
 import {
   ensureLocalProjectConfigIgnored,
   TrackedLocalProjectConfigError,
@@ -39,7 +42,9 @@ import {
 import { createTokenCommandConfig } from "./token-helper.js";
 import { validateApiKey } from "./validate-api-key.js";
 import {
+  rollbackManagedTextFile,
   writeManagedTextFile,
+  type ManagedTextComparator,
   type ManagedWriteResult,
 } from "./write-managed-file.js";
 
@@ -77,8 +82,32 @@ export interface InstallUseCaseDependencies {
   promptForModel: typeof promptForModel;
   promptForScope: typeof promptForScope;
   promptForTrackedLocalConfigAction: typeof promptForTrackedLocalConfigAction;
+  rollbackManagedTextFile: typeof rollbackManagedTextFile;
   validateApiKey: typeof validateApiKey;
   writeManagedTextFile: typeof writeManagedTextFile;
+}
+
+interface PreparedManagedWrite {
+  content: string;
+  contentComparator?: ManagedTextComparator;
+  filePath: string;
+  mode: number;
+}
+
+interface PreparedInstallPlan {
+  codex: CodexAvailability;
+  finalScope: InstallScope;
+  helperPath: string;
+  modelCatalogPath: string;
+  projectConfigPath?: string;
+  projectRoot: string;
+  requestedScope: InstallScope;
+  selectedModel: SupportedModel;
+  switchedToUserScope: boolean;
+  tokenPath: string;
+  trustTargetPath?: string;
+  userConfigPath: string;
+  writes: PreparedManagedWrite[];
 }
 
 export const defaultInstallUseCaseDependencies = {
@@ -93,6 +122,7 @@ export const defaultInstallUseCaseDependencies = {
   promptForModel,
   promptForScope,
   promptForTrackedLocalConfigAction,
+  rollbackManagedTextFile,
   validateApiKey,
   writeManagedTextFile,
 } satisfies InstallUseCaseDependencies;
@@ -101,6 +131,30 @@ export async function runInstallUseCase(
   request: InstallRequest,
   dependencies: InstallUseCaseDependencies = defaultInstallUseCaseDependencies,
 ): Promise<InstallOutcome> {
+  const installPlan = await prepareInstallPlan(request, dependencies);
+  const writes = await commitInstallPlan(installPlan, dependencies);
+
+  return {
+    codex: installPlan.codex,
+    finalScope: installPlan.finalScope,
+    helperPath: installPlan.helperPath,
+    modelCatalogPath: installPlan.modelCatalogPath,
+    projectConfigPath: installPlan.projectConfigPath,
+    projectRoot: installPlan.projectRoot,
+    requestedScope: installPlan.requestedScope,
+    selectedModel: installPlan.selectedModel,
+    switchedToUserScope: installPlan.switchedToUserScope,
+    tokenPath: installPlan.tokenPath,
+    trustTargetPath: installPlan.trustTargetPath,
+    userConfigPath: installPlan.userConfigPath,
+    writes,
+  };
+}
+
+async function prepareInstallPlan(
+  request: InstallRequest,
+  dependencies: InstallUseCaseDependencies,
+): Promise<PreparedInstallPlan> {
   const codex = dependencies.checkCodexAvailable();
   const apiKey = dependencies.validateApiKey(
     await dependencies.promptForApiKey(),
@@ -128,80 +182,46 @@ export async function runInstallUseCase(
     tokenPath: installPaths.tokenPath,
   });
   const curatedCatalog = createCuratedModelCatalog();
-  const writes: ManagedWriteResult[] = [];
+  const writes: PreparedManagedWrite[] = [
+    {
+      content: `${apiKey}\n`,
+      filePath: installPaths.tokenPath,
+      mode: 0o600,
+    },
+    {
+      content: tokenCommand.content,
+      filePath: tokenCommand.helperFilePath,
+      mode: tokenCommand.fileMode,
+    },
+    {
+      content: `${JSON.stringify(curatedCatalog, null, 2)}\n`,
+      filePath: installPaths.modelCatalogPath,
+      mode: 0o600,
+    },
+  ];
+
+  const configTargets = getConfigTargetsForScope(scopeResolution.finalScope);
+  const currentConfigs = await loadCurrentConfigs(
+    configTargets,
+    installPaths,
+    dependencies.loadTomlConfig,
+  );
+  const configPlan = buildInstallConfigPlan({
+    currentConfigs,
+    finalScope: scopeResolution.finalScope,
+    paths: installPaths,
+    selectedModel,
+    tokenCommand,
+  });
 
   writes.push(
-    await dependencies.writeManagedTextFile(
-      installPaths.tokenPath,
-      `${apiKey}\n`,
-      {
-        backupFactory: dependencies.createBackup,
-        mode: 0o600,
-      },
-    ),
-  );
-  writes.push(
-    await dependencies.writeManagedTextFile(
-      tokenCommand.helperFilePath,
-      tokenCommand.content,
-      {
-        backupFactory: dependencies.createBackup,
-        mode: tokenCommand.fileMode,
-      },
-    ),
-  );
-  writes.push(
-    await dependencies.writeManagedTextFile(
-      installPaths.modelCatalogPath,
-      `${JSON.stringify(curatedCatalog, null, 2)}\n`,
-      {
-        backupFactory: dependencies.createBackup,
-        mode: 0o600,
-      },
-    ),
-  );
-
-  const userConfig = await dependencies.loadTomlConfig(
-    installPaths.userConfigPath,
-  );
-  const nextUserConfig =
-    scopeResolution.finalScope === "user"
-      ? applyUserScopeConfig(
-          userConfig.settings,
-          selectedModel,
-          installPaths,
-          tokenCommand,
-        )
-      : applyLocalUserConfig(userConfig.settings, installPaths, tokenCommand);
-
-  writes.push(
-    await writeTomlConfig(
-      installPaths.userConfigPath,
-      nextUserConfig,
-      userConfig,
-      dependencies,
-    ),
-  );
-
-  if (scopeResolution.finalScope === "local") {
-    const projectConfig = await dependencies.loadTomlConfig(
-      installPaths.projectConfigPath,
-    );
-    const nextProjectConfig = applyLocalProjectConfig(
-      projectConfig.settings,
-      selectedModel,
-      installPaths,
-    );
-
-    writes.push(
-      await writeTomlConfig(
-        installPaths.projectConfigPath,
-        nextProjectConfig,
-        projectConfig,
-        dependencies,
+    ...configPlan.map((entry) =>
+      prepareTomlConfigWrite(
+        resolveConfigTargetPath(entry.target, installPaths),
+        entry.config,
       ),
-    );
-  }
+    ),
+  );
 
   return {
     codex,
@@ -224,6 +244,60 @@ export async function runInstallUseCase(
     userConfigPath: installPaths.userConfigPath,
     writes,
   };
+}
+
+async function commitInstallPlan(
+  installPlan: PreparedInstallPlan,
+  dependencies: Pick<
+    InstallUseCaseDependencies,
+    "createBackup" | "rollbackManagedTextFile" | "writeManagedTextFile"
+  >,
+): Promise<ManagedWriteResult[]> {
+  const writes: ManagedWriteResult[] = [];
+
+  try {
+    for (const plannedWrite of installPlan.writes) {
+      writes.push(
+        await dependencies.writeManagedTextFile(
+          plannedWrite.filePath,
+          plannedWrite.content,
+          {
+            backupFactory: dependencies.createBackup,
+            contentComparator: plannedWrite.contentComparator,
+            mode: plannedWrite.mode,
+          },
+        ),
+      );
+    }
+  } catch (error) {
+    const rollbackFailures = await rollbackCompletedWrites(
+      writes,
+      dependencies.rollbackManagedTextFile,
+    );
+    throw new InstallCommitError(error, writes, rollbackFailures);
+  }
+
+  return writes;
+}
+
+async function rollbackCompletedWrites(
+  completedWrites: readonly ManagedWriteResult[],
+  rollbackWrite: InstallUseCaseDependencies["rollbackManagedTextFile"],
+): Promise<InstallRollbackFailure[]> {
+  const rollbackFailures: InstallRollbackFailure[] = [];
+
+  for (const completedWrite of [...completedWrites].reverse()) {
+    try {
+      await rollbackWrite(completedWrite);
+    } catch (error) {
+      rollbackFailures.push({
+        filePath: completedWrite.filePath,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return rollbackFailures;
 }
 
 async function resolveFinalScope(
@@ -269,32 +343,48 @@ async function resolveFinalScope(
   }
 }
 
-async function writeTomlConfig(
+function prepareTomlConfigWrite(
   filePath: string,
   nextConfig: TomlTable,
-  loadedConfig: LoadedTomlConfig,
-  dependencies: Pick<
-    InstallUseCaseDependencies,
-    "createBackup" | "writeManagedTextFile"
-  >,
-): Promise<ManagedWriteResult> {
-  const text = renderTomlConfig(nextConfig);
+): PreparedManagedWrite {
+  return {
+    content: renderTomlConfig(nextConfig),
+    contentComparator: areNormalizedTextsEqual,
+    filePath,
+    mode: 0o600,
+  };
+}
 
-  if (
-    loadedConfig.exists &&
-    normalizeText(loadedConfig.text) === normalizeText(text)
-  ) {
-    return dependencies.writeManagedTextFile(filePath, text, {
-      backupFactory: dependencies.createBackup,
-      mode: 0o600,
-      skipBackupOnChange: true,
-    });
+async function loadCurrentConfigs(
+  configTargets: readonly ConfigLayerTarget[],
+  installPaths: InstallPaths,
+  loadConfig: InstallUseCaseDependencies["loadTomlConfig"],
+): Promise<Partial<Record<ConfigLayerTarget, TomlTable>>> {
+  const currentConfigs: Partial<Record<ConfigLayerTarget, TomlTable>> = {};
+
+  for (const configTarget of configTargets) {
+    currentConfigs[configTarget] = (
+      await loadConfig(resolveConfigTargetPath(configTarget, installPaths))
+    ).settings;
   }
 
-  return dependencies.writeManagedTextFile(filePath, text, {
-    backupFactory: dependencies.createBackup,
-    mode: 0o600,
-  });
+  return currentConfigs;
+}
+
+function resolveConfigTargetPath(
+  configTarget: ConfigLayerTarget,
+  installPaths: InstallPaths,
+): string {
+  return configTarget === "project"
+    ? installPaths.projectConfigPath
+    : installPaths.userConfigPath;
+}
+
+function areNormalizedTextsEqual(
+  currentText: string,
+  nextText: string,
+): boolean {
+  return normalizeText(currentText) === normalizeText(nextText);
 }
 
 function normalizeText(text: string): string {

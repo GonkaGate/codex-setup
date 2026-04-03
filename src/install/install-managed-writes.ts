@@ -4,12 +4,15 @@ import {
 } from "../constants/models.js";
 import {
   type ConfigFilePlanEntry,
-  createManagedTomlConfigWrite,
   planInstallConfigWrites,
-  type LoadedTomlConfig,
 } from "./codex-config.js";
 import { OWNER_READ_WRITE_MODE } from "./file-permissions.js";
-import type { InstallPaths, InstallScope } from "./settings-paths.js";
+import type { ScopeConfigLayer } from "./install-scope.js";
+import type { InstallPaths } from "./settings-paths.js";
+import {
+  createManagedTomlConfigWrite,
+  type LoadedTomlConfig,
+} from "./toml-config.js";
 import type { TokenCommandConfig } from "./token-helper.js";
 import type { ManagedTextComparator } from "./write-managed-file.js";
 
@@ -37,7 +40,7 @@ export interface PlannedManagedWritePhase {
 
 export interface PlanInstallManagedWritesInput {
   apiKey: string;
-  finalScope: InstallScope;
+  configLayers: readonly ScopeConfigLayer[];
   installPaths: InstallPaths;
   loadTomlConfig: (filePath: string) => Promise<LoadedTomlConfig>;
   selectedModel: SupportedModel;
@@ -56,16 +59,28 @@ export async function planInstallManagedWrites(
 export async function planInstallManagedWritePhases(
   input: PlanInstallManagedWritesInput,
 ): Promise<PlannedManagedWritePhase[]> {
-  // Keep the on-disk write sequence explicit so future additions do not have to
-  // infer ordering from an indirection layer.
   return [
-    createManagedWritePhase("credentials", [
-      planTokenManagedWrite(input),
-      planHelperManagedWrite(input),
-    ]),
-    createManagedWritePhase("catalog", [planModelCatalogManagedWrite(input)]),
-    createManagedWritePhase("config", await planConfigManagedWrites(input)),
+    planCredentialManagedWritePhase(input),
+    planCatalogManagedWritePhase(input),
+    await planConfigManagedWritePhase(input),
   ];
+}
+
+function planCredentialManagedWritePhase(
+  context: ManagedWritePlanningContext,
+): PlannedManagedWritePhase {
+  return createManagedWritePhase("credentials", [
+    planTokenManagedWrite(context),
+    planHelperManagedWrite(context),
+  ]);
+}
+
+function planCatalogManagedWritePhase(
+  context: ManagedWritePlanningContext,
+): PlannedManagedWritePhase {
+  return createManagedWritePhase("catalog", [
+    planModelCatalogManagedWrite(context),
+  ]);
 }
 
 function planTokenManagedWrite(
@@ -101,18 +116,21 @@ function planModelCatalogManagedWrite(
   );
 }
 
-async function planConfigManagedWrites(
+async function planConfigManagedWritePhase(
   context: ManagedWritePlanningContext,
-): Promise<readonly PlannedManagedWrite[]> {
+): Promise<PlannedManagedWritePhase> {
   const configPlan = await planInstallConfigWrites({
-    finalScope: context.finalScope,
+    configLayers: context.configLayers,
     loadTomlConfig: context.loadTomlConfig,
     paths: context.installPaths,
     selectedModel: context.selectedModel,
     tokenCommand: context.tokenCommand,
   });
 
-  return configPlan.map((entry) => prepareTomlConfigWrite(entry));
+  return createManagedWritePhase(
+    "config",
+    configPlan.map((entry) => prepareTomlConfigWrite(entry)),
+  );
 }
 
 function prepareTomlConfigWrite(

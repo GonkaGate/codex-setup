@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { areEquivalentTomlTexts } from "../src/install/codex-config.js";
+import { areEquivalentTomlTexts } from "../src/install/toml-config.js";
 import { writeManagedTextFile } from "../src/install/write-managed-file.js";
 import { createTempWorkspace } from "./helpers/workspace.js";
 

@@ -6,14 +6,17 @@ import {
 } from "../src/constants/gateway.js";
 import { DEFAULT_MODEL } from "../src/constants/models.js";
 import {
-  areEquivalentTomlTexts,
   buildInstallConfigPlan,
-  createManagedTomlConfigWrite,
   planInstallConfigWrites,
   type ConfigPathsInput,
+} from "../src/install/codex-config.js";
+import { getScopeConfigLayers } from "../src/install/install-scope.js";
+import {
+  areEquivalentTomlTexts,
+  createManagedTomlConfigWrite,
   type LoadedTomlConfig,
   type TomlTable,
-} from "../src/install/codex-config.js";
+} from "../src/install/toml-config.js";
 import type { TokenCommandConfig } from "../src/install/token-helper.js";
 
 const testPaths: ConfigPathsInput = {
@@ -49,7 +52,7 @@ function createLoadedTomlConfig(
 
 test("planInstallConfigWrites keeps user scope config ownership centralized", async () => {
   const [userLayer] = await planInstallConfigWrites({
-    finalScope: "user",
+    configLayers: getScopeConfigLayers("user"),
     loadTomlConfig: async (filePath) =>
       createLoadedTomlConfig(
         filePath,
@@ -82,7 +85,7 @@ test("planInstallConfigWrites keeps user scope config ownership centralized", as
 
 test("planInstallConfigWrites splits local scope across user and project layers", async () => {
   const configPlan = await planInstallConfigWrites({
-    finalScope: "local",
+    configLayers: getScopeConfigLayers("local"),
     loadTomlConfig: async (filePath) =>
       createLoadedTomlConfig(
         filePath,
@@ -143,7 +146,7 @@ test("planInstallConfigWrites splits local scope across user and project layers"
 test("planInstallConfigWrites only loads config files for the active scope layers", async () => {
   const userScopeLoads: string[] = [];
   await planInstallConfigWrites({
-    finalScope: "user",
+    configLayers: getScopeConfigLayers("user"),
     loadTomlConfig: async (filePath) => {
       userScopeLoads.push(filePath);
       return createLoadedTomlConfig(filePath, {});
@@ -160,7 +163,7 @@ test("planInstallConfigWrites only loads config files for the active scope layer
 
   const localScopeLoads: string[] = [];
   await planInstallConfigWrites({
-    finalScope: "local",
+    configLayers: getScopeConfigLayers("local"),
     loadTomlConfig: async (filePath) => {
       localScopeLoads.push(filePath);
       return createLoadedTomlConfig(filePath, {});
@@ -181,6 +184,7 @@ test("planInstallConfigWrites only loads config files for the active scope layer
 
 test("buildInstallConfigPlan keeps pure config merging separate from file loading", () => {
   const [userLayer] = buildInstallConfigPlan({
+    configLayers: getScopeConfigLayers("user"),
     currentConfigs: {
       user: {
         analytics: {
@@ -188,7 +192,6 @@ test("buildInstallConfigPlan keeps pure config merging separate from file loadin
         },
       },
     },
-    finalScope: "user",
     paths: testPaths,
     selectedModel: DEFAULT_MODEL,
     tokenCommand: testTokenCommand,

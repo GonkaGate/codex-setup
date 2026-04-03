@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveInstallScope } from "../src/install/install-scope.js";
+import {
+  createLocalScopeDetails,
+  createUserScopeDetails,
+  resolveInstallScope,
+} from "../src/install/install-scope.js";
 import type {
   TrackedLocalProjectConfigInspection,
   UntrackedLocalProjectConfigInspection,
@@ -32,8 +36,7 @@ test("resolveInstallScope keeps user scope without local config inspection", asy
 
   assert.deepEqual(resolution, {
     details: {
-      finalScope: "user",
-      switchedToUserScope: false,
+      ...createUserScopeDetails(false),
     },
   });
   assert.equal(inspectCount, 0);
@@ -57,10 +60,7 @@ test("resolveInstallScope keeps local scope when the project config is outside g
 
   assert.deepEqual(resolution, {
     details: {
-      finalScope: "local",
-      projectConfigPath: testInstallPaths.projectConfigPath,
-      switchedToUserScope: false,
-      trustTargetPath: testInstallPaths.projectRoot,
+      ...createLocalScopeDetails(testInstallPaths),
     },
   });
   assert.equal(promptCount, 0);
@@ -78,10 +78,7 @@ test("resolveInstallScope returns an exclude target for untracked local configs"
 
   assert.deepEqual(resolution, {
     details: {
-      finalScope: "local",
-      projectConfigPath: testInstallPaths.projectConfigPath,
-      switchedToUserScope: false,
-      trustTargetPath: testInstallPaths.projectRoot,
+      ...createLocalScopeDetails(testInstallPaths),
     },
     localProjectConfigExcludeTarget: {
       gitDir: untrackedInspection.gitContext.gitDir,
@@ -106,8 +103,7 @@ test("resolveInstallScope switches tracked local config to user scope when reque
 
   assert.deepEqual(resolution, {
     details: {
-      finalScope: "user",
-      switchedToUserScope: true,
+      ...createUserScopeDetails(true),
     },
   });
   assert.equal(promptTarget, trackedInspection.relativeConfigPath);

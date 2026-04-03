@@ -7,6 +7,10 @@ import { formatIntroOutput, formatSuccessOutput } from "../src/cli-output.js";
 import { GONKAGATE_BASE_URL } from "../src/constants/gateway.js";
 import { DEFAULT_MODEL, DEFAULT_MODEL_KEY } from "../src/constants/models.js";
 import { parseCliOptions } from "../src/cli.js";
+import {
+  createLocalScopeDetails,
+  createUserScopeDetails,
+} from "../src/install/install-scope.js";
 import type { InstallOutcome } from "../src/install/install-use-case.js";
 import { escapeRegExp, repoRoot } from "./contract-helpers.js";
 
@@ -129,12 +133,22 @@ test("formatSuccessOutput omits empty optional sections for user scope", () => {
 function createInstallOutcome(
   overrides: Partial<InstallOutcome> = {},
 ): InstallOutcome {
+  const finalScope = overrides.finalScope ?? "user";
+  const scopeDetails =
+    finalScope === "local"
+      ? createLocalScopeDetails({
+          projectConfigPath: "/Users/test/project/.codex/config.toml",
+          projectRoot: "/Users/test/project",
+        })
+      : createUserScopeDetails(overrides.switchedToUserScope ?? false);
+
   return {
+    ...scopeDetails,
     codex: {
       command: "codex",
       version: "0.118.0",
     },
-    finalScope: "user",
+    finalScope,
     helperPath: "/Users/test/.codex/bin/gonkagate-token",
     modelCatalogPath: "/Users/test/.codex/model-catalogs/gonkagate.json",
     projectRoot: "/Users/test/project",

@@ -63,16 +63,18 @@ export async function prepareInstallPlan(
     inputDependencies,
     planningDependencies,
   );
+  const writePhases = await planPreparedInstallWritePhases(
+    context,
+    planningDependencies.loadTomlConfig,
+  );
+
   return {
     context,
-    writePhases: await planPreparedInstallWritePhases(
-      context,
-      planningDependencies.loadTomlConfig,
-    ),
+    writePhases,
   };
 }
 
-interface CollectedInstallInputs {
+interface ResolvedInstallInputs {
   apiKey: string;
   codex: CodexAvailability;
   requestedScope: InstallScope;
@@ -84,38 +86,29 @@ async function resolvePreparedInstallContext(
   inputDependencies: InstallInputDependencies,
   planningDependencies: InstallPlanningDependencies,
 ): Promise<PreparedInstallContext> {
-  const collectedInputs = await collectInstallInputs(
-    request,
-    inputDependencies,
-  );
+  const resolvedInputs = await collectInstallInputs(request, inputDependencies);
   const installPaths = await resolveInstallPathsForRequest(
     request,
     inputDependencies.environment,
   );
-  const scopeResolution = await resolveInstallScope({
-    inspectLocalProjectConfig: inputDependencies.inspectLocalProjectConfig,
+  const scopeResolution = await resolveRequestedInstallScope(
     installPaths,
-    promptForTrackedLocalConfigAction:
-      inputDependencies.promptForTrackedLocalConfigAction,
-    requestedScope: collectedInputs.requestedScope,
+    resolvedInputs.requestedScope,
+    inputDependencies,
+  );
+  const tokenCommand = createTokenCommandConfig({
+    codexHome: installPaths.codexHome,
+    nodeExecutable: planningDependencies.nodeExecutable,
+    platform: planningDependencies.platform,
+    tokenPath: installPaths.tokenPath,
   });
 
-  return {
-    ...scopeResolution.details,
-    apiKey: collectedInputs.apiKey,
-    codex: collectedInputs.codex,
+  return createPreparedInstallContext(
+    resolvedInputs,
     installPaths,
-    localProjectConfigExcludeTarget:
-      scopeResolution.localProjectConfigExcludeTarget,
-    requestedScope: collectedInputs.requestedScope,
-    selectedModel: collectedInputs.selectedModel,
-    tokenCommand: createTokenCommandConfig({
-      codexHome: installPaths.codexHome,
-      nodeExecutable: planningDependencies.nodeExecutable,
-      platform: planningDependencies.platform,
-      tokenPath: installPaths.tokenPath,
-    }),
-  };
+    scopeResolution,
+    tokenCommand,
+  );
 }
 
 async function resolveInstallPathsForRequest(
@@ -128,6 +121,39 @@ async function resolveInstallPathsForRequest(
     environment,
     projectRoot,
   });
+}
+
+async function resolveRequestedInstallScope(
+  installPaths: InstallPaths,
+  requestedScope: InstallScope,
+  inputDependencies: InstallInputDependencies,
+) {
+  return resolveInstallScope({
+    inspectLocalProjectConfig: inputDependencies.inspectLocalProjectConfig,
+    installPaths,
+    promptForTrackedLocalConfigAction:
+      inputDependencies.promptForTrackedLocalConfigAction,
+    requestedScope,
+  });
+}
+
+function createPreparedInstallContext(
+  resolvedInputs: ResolvedInstallInputs,
+  installPaths: InstallPaths,
+  scopeResolution: Awaited<ReturnType<typeof resolveInstallScope>>,
+  tokenCommand: TokenCommandConfig,
+): PreparedInstallContext {
+  return {
+    ...scopeResolution.details,
+    apiKey: resolvedInputs.apiKey,
+    codex: resolvedInputs.codex,
+    installPaths,
+    localProjectConfigExcludeTarget:
+      scopeResolution.localProjectConfigExcludeTarget,
+    requestedScope: resolvedInputs.requestedScope,
+    selectedModel: resolvedInputs.selectedModel,
+    tokenCommand,
+  };
 }
 
 async function planPreparedInstallWritePhases(
@@ -147,7 +173,7 @@ async function planPreparedInstallWritePhases(
 async function collectInstallInputs(
   request: InstallRequest,
   inputDependencies: InstallInputDependencies,
-): Promise<CollectedInstallInputs> {
+): Promise<ResolvedInstallInputs> {
   const codex = inputDependencies.checkCodexAvailable();
   const apiKey = inputDependencies.validateApiKey(
     await inputDependencies.promptForApiKey(),
@@ -168,8 +194,7 @@ async function collectInstallInputs(
     selectedModel,
   };
 }
-
-export function summarizePreparedInstallContext(
+export function createInstallSummary(
   context: PreparedInstallContext,
 ): InstallSummary {
   return {

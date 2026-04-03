@@ -8,7 +8,7 @@ import { DEFAULT_MODEL } from "../src/constants/models.js";
 import {
   buildInstallConfigPlan,
   planInstallConfigWrites,
-  type ConfigPatchPaths,
+  type InstallConfigPaths,
 } from "../src/install/codex-config.js";
 import {
   areEquivalentTomlTexts,
@@ -18,10 +18,12 @@ import {
 } from "../src/install/toml-config.js";
 import type { TokenCommandConfig } from "../src/install/token-helper.js";
 
-const testPaths: ConfigPatchPaths = {
+const testPaths: InstallConfigPaths = {
   codexHome: "/Users/test/.codex",
   modelCatalogPath: "/Users/test/.codex/model-catalogs/gonkagate.json",
+  projectConfigPath: "/Users/test/project/.codex/config.toml",
   projectRoot: "/Users/test/project",
+  userConfigPath: "/Users/test/.codex/config.toml",
 };
 
 const testLayerPaths = {

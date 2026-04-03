@@ -41,44 +41,28 @@ export type LocalProjectConfigInspection =
 export async function inspectLocalProjectConfig(
   projectConfigPath: string,
 ): Promise<LocalProjectConfigInspection> {
-  const repoProjectConfigPath =
-    await resolveRepositoryProjectConfigPath(projectConfigPath);
+  const repositoryConfigLocation =
+    await findRepositoryProjectConfig(projectConfigPath);
 
-  if (!repoProjectConfigPath) {
+  if (!repositoryConfigLocation) {
     return {
       kind: "outside_repo",
     };
   }
 
-  const trackedByGit = await isRepoPathTracked(
-    repoProjectConfigPath.repoRelativeConfigPath,
-    repoProjectConfigPath.gitContext.repoRoot,
-  );
-
-  if (trackedByGit) {
-    return {
-      ...repoProjectConfigPath,
-      kind: "tracked",
-    };
-  }
-
-  return {
-    ...repoProjectConfigPath,
-    excludeTarget: createLocalProjectConfigExcludeTarget(repoProjectConfigPath),
-    kind: "untracked",
-  };
+  return inspectRepositoryProjectConfig(repositoryConfigLocation);
 }
 
-interface RepositoryProjectConfigPath {
+interface RepositoryProjectConfigLocation {
   gitContext: GitContext;
   repoRelativeConfigPath: string;
 }
 
-async function resolveRepositoryProjectConfigPath(
+async function findRepositoryProjectConfig(
   projectConfigPath: string,
-): Promise<RepositoryProjectConfigPath | null> {
+): Promise<RepositoryProjectConfigLocation | null> {
   const gitContext = await findGitContext(path.dirname(projectConfigPath));
-  await assertSafeProjectConfigPath(projectConfigPath, gitContext?.repoRoot);
+  await assertProjectConfigPathSafe(projectConfigPath, gitContext?.repoRoot);
 
   if (!gitContext) {
     return null;
@@ -93,12 +77,50 @@ async function resolveRepositoryProjectConfigPath(
   };
 }
 
-function createLocalProjectConfigExcludeTarget(
-  repoProjectConfigPath: RepositoryProjectConfigPath,
+async function inspectRepositoryProjectConfig(
+  repositoryConfigLocation: RepositoryProjectConfigLocation,
+): Promise<
+  TrackedLocalProjectConfigInspection | UntrackedLocalProjectConfigInspection
+> {
+  const trackedByGit = await isRepoPathTracked(
+    repositoryConfigLocation.repoRelativeConfigPath,
+    repositoryConfigLocation.gitContext.repoRoot,
+  );
+
+  if (trackedByGit) {
+    return createTrackedLocalProjectConfigInspection(repositoryConfigLocation);
+  }
+
+  return createUntrackedLocalProjectConfigInspection(repositoryConfigLocation);
+}
+
+function createTrackedLocalProjectConfigInspection(
+  repositoryConfigLocation: RepositoryProjectConfigLocation,
+): TrackedLocalProjectConfigInspection {
+  return {
+    ...repositoryConfigLocation,
+    kind: "tracked",
+  };
+}
+
+function createUntrackedLocalProjectConfigInspection(
+  repositoryConfigLocation: RepositoryProjectConfigLocation,
+): UntrackedLocalProjectConfigInspection {
+  return {
+    ...repositoryConfigLocation,
+    excludeTarget: buildLocalProjectConfigExcludeTarget(
+      repositoryConfigLocation,
+    ),
+    kind: "untracked",
+  };
+}
+
+function buildLocalProjectConfigExcludeTarget(
+  repositoryConfigLocation: RepositoryProjectConfigLocation,
 ): LocalProjectConfigExcludeTarget {
   return {
-    gitDir: repoProjectConfigPath.gitContext.gitDir,
-    repoRelativeConfigPath: repoProjectConfigPath.repoRelativeConfigPath,
+    gitDir: repositoryConfigLocation.gitContext.gitDir,
+    repoRelativeConfigPath: repositoryConfigLocation.repoRelativeConfigPath,
   };
 }
 
@@ -137,18 +159,18 @@ async function isRepoPathTracked(
   }
 }
 
-async function assertSafeProjectConfigPath(
+async function assertProjectConfigPathSafe(
   projectConfigPath: string,
   repoRoot?: string,
 ): Promise<void> {
   const pathsToInspect = repoRoot
-    ? listPathsBetweenRepoRootAndConfig(repoRoot, projectConfigPath)
+    ? listProjectConfigPathsToInspect(repoRoot, projectConfigPath)
     : [path.dirname(projectConfigPath), projectConfigPath];
 
-  for (const pathToInspect of pathsToInspect) {
+  for (const inspectedPath of pathsToInspect) {
     await assertPathIsNotSymlink(
-      pathToInspect,
-      buildSymlinkErrorMessage(pathToInspect, projectConfigPath, repoRoot),
+      inspectedPath,
+      buildSymlinkErrorMessage(inspectedPath, projectConfigPath, repoRoot),
     );
   }
 }
@@ -174,7 +196,7 @@ async function assertPathIsNotSymlink(
 
 // Walk every path component between the repo root and the config file so local
 // scope cannot write through a symlinked intermediate directory.
-function listPathsBetweenRepoRootAndConfig(
+function listProjectConfigPathsToInspect(
   repoRoot: string,
   projectConfigPath: string,
 ): string[] {
@@ -197,20 +219,20 @@ function listPathsBetweenRepoRootAndConfig(
 }
 
 function buildSymlinkErrorMessage(
-  pathToInspect: string,
+  inspectedPath: string,
   projectConfigPath: string,
   repoRoot?: string,
 ): string {
-  if (pathToInspect === path.dirname(projectConfigPath)) {
+  if (inspectedPath === path.dirname(projectConfigPath)) {
     return 'Refusing to write local Codex config into a symlinked ".codex" directory.';
   }
 
-  if (pathToInspect === projectConfigPath) {
+  if (inspectedPath === projectConfigPath) {
     return "Refusing to overwrite local Codex config through a symlinked file.";
   }
 
   const label = repoRoot
-    ? path.relative(repoRoot, pathToInspect) || path.basename(pathToInspect)
-    : pathToInspect;
+    ? path.relative(repoRoot, inspectedPath) || path.basename(inspectedPath)
+    : inspectedPath;
   return `Refusing local Codex setup through a symlinked path component: ${label}.`;
 }

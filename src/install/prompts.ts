@@ -100,7 +100,7 @@ export function buildTrackedLocalConfigActionPromptConfig(
 export async function promptForModel(
   models: readonly SupportedModel[],
   defaultModelKey: SupportedModelKey,
-  injectedSelectRunner?: SelectPromptRunner<SupportedModelKey>,
+  selectRunner?: SelectPromptRunner<SupportedModelKey>,
 ): Promise<SupportedModel> {
   if (models.length === 1) {
     return models[0];
@@ -108,31 +108,25 @@ export async function promptForModel(
 
   const selectedModelKey = await runSelectPrompt(
     buildModelPromptConfig(models, defaultModelKey),
-    defaultModelSelectRunner,
-    injectedSelectRunner,
+    selectRunner,
   );
   return requireModel(models, selectedModelKey);
 }
 
 export async function promptForScope(
   defaultScope: InstallScope,
-  injectedSelectRunner?: SelectPromptRunner<InstallScope>,
+  selectRunner?: SelectPromptRunner<InstallScope>,
 ): Promise<InstallScope> {
-  return runSelectPrompt(
-    buildScopePromptConfig(defaultScope),
-    defaultScopeSelectRunner,
-    injectedSelectRunner,
-  );
+  return runSelectPrompt(buildScopePromptConfig(defaultScope), selectRunner);
 }
 
 export async function promptForTrackedLocalConfigAction(
   repoRelativeConfigPath: string,
-  injectedSelectRunner?: SelectPromptRunner<TrackedLocalConfigAction>,
+  selectRunner?: SelectPromptRunner<TrackedLocalConfigAction>,
 ): Promise<TrackedLocalConfigAction> {
   return runSelectPrompt(
     buildTrackedLocalConfigActionPromptConfig(repoRelativeConfigPath),
-    defaultTrackedLocalConfigActionSelectRunner,
-    injectedSelectRunner,
+    selectRunner,
   );
 }
 
@@ -173,15 +167,14 @@ function buildNumberedSelectPromptConfig<Value>(
 
 async function runSelectPrompt<Value>(
   config: SelectPromptConfig<Value>,
-  defaultSelectRunner: SelectPromptRunner<Value>,
-  injectedSelectRunner?: SelectPromptRunner<Value>,
+  selectRunner?: SelectPromptRunner<Value>,
 ): Promise<Value> {
-  if (!injectedSelectRunner) {
+  if (!selectRunner) {
     assertInteractiveTty();
   }
 
-  const selectRunner = injectedSelectRunner ?? defaultSelectRunner;
-  return selectRunner(config).catch(rethrowPromptExit);
+  const runner = selectRunner ?? (select as SelectPromptRunner<Value>);
+  return runner(config).catch(rethrowPromptExit);
 }
 
 function rethrowPromptExit(error: unknown): never {
@@ -218,12 +211,6 @@ interface SelectPromptConfig<Value> {
 type SelectPromptRunner<Value> = (
   config: SelectPromptConfig<Value>,
 ) => Promise<Value>;
-
-const defaultModelSelectRunner =
-  select as SelectPromptRunner<SupportedModelKey>;
-const defaultScopeSelectRunner = select as SelectPromptRunner<InstallScope>;
-const defaultTrackedLocalConfigActionSelectRunner =
-  select as SelectPromptRunner<TrackedLocalConfigAction>;
 
 const NUMBERED_SELECT_THEME = {
   indexMode: "number",

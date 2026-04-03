@@ -16,17 +16,19 @@ import type { TokenCommandConfig } from "./token-helper.js";
 
 export type ConfigTarget = "user" | "project";
 
-export type ConfigPatchPaths = Pick<
+export type InstallConfigPaths = Pick<
   InstallPaths,
-  "codexHome" | "modelCatalogPath" | "projectRoot"
+  | "codexHome"
+  | "modelCatalogPath"
+  | "projectConfigPath"
+  | "projectRoot"
+  | "userConfigPath"
 >;
 
-type ConfigFilePaths = Pick<
-  InstallPaths,
-  "projectConfigPath" | "userConfigPath"
->;
-
-type InstallConfigPaths = ConfigPatchPaths & ConfigFilePaths;
+interface ExistingInstallConfigs {
+  projectConfig?: TomlTable;
+  userConfig: TomlTable;
+}
 
 export interface PlannedConfigWrite {
   config: TomlTable;
@@ -35,39 +37,28 @@ export interface PlannedConfigWrite {
 }
 
 export interface BuildInstallConfigPlanInput {
-  existingConfigs: {
-    projectConfig?: TomlTable;
-    userConfig: TomlTable;
-  };
+  existingConfigs: ExistingInstallConfigs;
   finalScope: InstallScope;
   paths: InstallConfigPaths;
   selectedModel: SupportedModel;
   tokenCommand: TokenCommandConfig;
 }
 
-export interface PlanInstallConfigWritesInput {
-  finalScope: InstallScope;
+export interface PlanInstallConfigWritesInput extends Omit<
+  BuildInstallConfigPlanInput,
+  "existingConfigs"
+> {
   loadTomlConfig: (filePath: string) => Promise<LoadedTomlConfig>;
-  paths: InstallConfigPaths;
-  selectedModel: SupportedModel;
-  tokenCommand: TokenCommandConfig;
 }
 
 export async function planInstallConfigWrites(
   input: PlanInstallConfigWritesInput,
 ): Promise<PlannedConfigWrite[]> {
-  const existingConfigs = await loadExistingConfigsForScope(
-    input.finalScope,
-    input.paths,
-    input.loadTomlConfig,
-  );
+  const existingConfigs = await loadExistingConfigTables(input);
 
   return buildInstallConfigPlan({
+    ...input,
     existingConfigs,
-    finalScope: input.finalScope,
-    paths: input.paths,
-    selectedModel: input.selectedModel,
-    tokenCommand: input.tokenCommand,
   });
 }
 
@@ -81,7 +72,12 @@ export function buildInstallConfigPlan(
         input.paths.userConfigPath,
         mergeTomlTables(
           input.existingConfigs.userConfig,
-          buildUserScopeConfigPatch(input),
+          buildUserScopeConfig(
+            input.selectedModel,
+            input.paths.modelCatalogPath,
+            input.paths.codexHome,
+            input.tokenCommand,
+          ),
         ),
       ),
     ];
@@ -93,7 +89,11 @@ export function buildInstallConfigPlan(
       input.paths.userConfigPath,
       mergeTomlTables(
         input.existingConfigs.userConfig,
-        buildLocalScopeUserConfigPatch(input),
+        buildLocalScopeUserConfig(
+          input.paths.projectRoot,
+          input.paths.codexHome,
+          input.tokenCommand,
+        ),
       ),
     ),
     createConfigWrite(
@@ -101,27 +101,33 @@ export function buildInstallConfigPlan(
       input.paths.projectConfigPath,
       mergeTomlTables(
         input.existingConfigs.projectConfig ?? {},
-        buildLocalScopeProjectConfigPatch(input),
+        buildLocalScopeProjectConfig(
+          input.selectedModel,
+          input.paths.modelCatalogPath,
+        ),
       ),
     ),
   ];
 }
 
-async function loadExistingConfigsForScope(
-  finalScope: InstallScope,
-  paths: InstallConfigPaths,
-  loadTomlConfig: (filePath: string) => Promise<LoadedTomlConfig>,
-): Promise<BuildInstallConfigPlanInput["existingConfigs"]> {
-  const userConfig = (await loadTomlConfig(paths.userConfigPath)).settings;
+async function loadExistingConfigTables(
+  input: Pick<
+    PlanInstallConfigWritesInput,
+    "finalScope" | "loadTomlConfig" | "paths"
+  >,
+): Promise<ExistingInstallConfigs> {
+  const userConfig = (await input.loadTomlConfig(input.paths.userConfigPath))
+    .settings;
 
-  if (finalScope !== "local") {
+  if (input.finalScope !== "local") {
     return {
       userConfig,
     };
   }
 
   return {
-    projectConfig: (await loadTomlConfig(paths.projectConfigPath)).settings,
+    projectConfig: (await input.loadTomlConfig(input.paths.projectConfigPath))
+      .settings,
     userConfig,
   };
 }
@@ -138,64 +144,64 @@ function createConfigWrite(
   };
 }
 
-function buildUserScopeConfigPatch(
-  input: Pick<
-    BuildInstallConfigPlanInput,
-    "paths" | "selectedModel" | "tokenCommand"
-  >,
+function buildUserScopeConfig(
+  selectedModel: SupportedModel,
+  modelCatalogPath: string,
+  codexHome: string,
+  tokenCommand: TokenCommandConfig,
 ): TomlTable {
-  return mergeConfigPatches(
-    buildActivationConfigPatch(input.selectedModel, input.paths),
-    buildProviderConfigPatch(input.paths, input.tokenCommand),
+  return mergeConfigFragments(
+    buildActivationConfigPatch(selectedModel, modelCatalogPath),
+    buildProviderConfigPatch(codexHome, tokenCommand),
   );
 }
 
-function buildLocalScopeUserConfigPatch(
-  input: Pick<
-    BuildInstallConfigPlanInput,
-    "paths" | "selectedModel" | "tokenCommand"
-  >,
+function buildLocalScopeUserConfig(
+  projectRoot: string,
+  codexHome: string,
+  tokenCommand: TokenCommandConfig,
 ): TomlTable {
-  return mergeConfigPatches(
-    buildProviderConfigPatch(input.paths, input.tokenCommand),
-    buildTrustConfigPatch(input.paths.projectRoot),
+  return mergeConfigFragments(
+    buildProviderConfigPatch(codexHome, tokenCommand),
+    buildTrustConfigPatch(projectRoot),
   );
 }
 
-function buildLocalScopeProjectConfigPatch(
-  input: Pick<BuildInstallConfigPlanInput, "paths" | "selectedModel">,
+function buildLocalScopeProjectConfig(
+  selectedModel: SupportedModel,
+  modelCatalogPath: string,
 ): TomlTable {
-  return buildActivationConfigPatch(input.selectedModel, input.paths);
+  return buildActivationConfigPatch(selectedModel, modelCatalogPath);
 }
 
-function mergeConfigPatches(...patches: readonly TomlTable[]): TomlTable {
-  let mergedPatch: TomlTable = {};
+function mergeConfigFragments(...patches: readonly TomlTable[]): TomlTable {
+  let mergedConfig: TomlTable = {};
 
   for (const patch of patches) {
-    mergedPatch = mergeTomlTables(mergedPatch, patch);
+    mergedConfig = mergeTomlTables(mergedConfig, patch);
   }
 
-  return mergedPatch;
+  return mergedConfig;
 }
 
 function buildActivationConfigPatch(
   selectedModel: SupportedModel,
-  paths: ConfigPatchPaths,
+  modelCatalogPath: string,
 ): TomlTable {
   return {
     model: selectedModel.modelId,
-    model_catalog_json: paths.modelCatalogPath,
+    model_catalog_json: modelCatalogPath,
     model_provider: GONKAGATE_PROVIDER_ID,
   };
 }
 
 function buildProviderConfigPatch(
-  paths: ConfigPatchPaths,
+  codexHome: string,
   tokenCommand: TokenCommandConfig,
 ): TomlTable {
   return {
     model_providers: {
-      [GONKAGATE_PROVIDER_ID]: buildProviderConfig(paths, tokenCommand),
+      [GONKAGATE_PROVIDER_ID]: buildProviderConfig(codexHome, tokenCommand),
     },
   };
 }
@@ -211,12 +217,12 @@ function buildTrustConfigPatch(projectRoot: string): TomlTable {
 }
 
 function buildProviderConfig(
-  paths: ConfigPatchPaths,
+  codexHome: string,
   tokenCommand: TokenCommandConfig,
 ): TomlTable {
   const authConfig: TomlTable = {
     command: tokenCommand.command,
-    cwd: paths.codexHome,
+    cwd: codexHome,
     refresh_interval_ms: TOKEN_REFRESH_INTERVAL_MS,
     timeout_ms: TOKEN_COMMAND_TIMEOUT_MS,
   };

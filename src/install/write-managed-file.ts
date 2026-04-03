@@ -34,24 +34,26 @@ export async function writeManagedTextFile(
 ): Promise<ManagedWriteResult> {
   const mode = options.mode ?? OWNER_READ_WRITE_MODE;
   await ensureDirectory(path.dirname(filePath), OWNER_READ_WRITE_EXECUTE_MODE);
-  const currentState = await readManagedTextFileState(filePath);
-  const contentsMatch = options.contentComparator
-    ? options.contentComparator(currentState.text, content)
-    : currentState.text === content;
+  const existingFile = await readManagedTextFileState(filePath);
+  const contentsMatch = contentsAreEqual(
+    existingFile.text,
+    content,
+    options.contentComparator,
+  );
 
   if (contentsMatch) {
-    if (currentState.exists) {
+    if (existingFile.exists) {
       await applyUnixMode(filePath, mode);
     }
     return {
       changed: false,
       filePath,
-      previouslyExisted: currentState.exists,
+      previouslyExisted: existingFile.exists,
     };
   }
 
   const backupPath =
-    currentState.exists && options.backupFactory
+    existingFile.exists && options.backupFactory
       ? await options.backupFactory(filePath, mode)
       : undefined;
 
@@ -65,7 +67,7 @@ export async function writeManagedTextFile(
     backupPath,
     changed: true,
     filePath,
-    previouslyExisted: currentState.exists,
+    previouslyExisted: existingFile.exists,
   };
 }
 
@@ -77,7 +79,7 @@ export async function rollbackManagedTextFile(
   }
 
   if (write.backupPath) {
-    await assertSafeFileTarget(write.filePath);
+    await assertSafeRollbackTarget(write.filePath);
     await copyFile(write.backupPath, write.filePath);
     const backupStats = await stat(write.backupPath);
     await applyUnixMode(write.filePath, backupStats.mode & 0o777);
@@ -85,7 +87,7 @@ export async function rollbackManagedTextFile(
   }
 
   if (!write.previouslyExisted) {
-    await assertSafeFileTarget(write.filePath);
+    await assertSafeRollbackTarget(write.filePath);
     await rm(write.filePath, {
       force: true,
     });
@@ -97,19 +99,22 @@ interface ManagedTextFileState {
   text: string;
 }
 
+function contentsAreEqual(
+  currentText: string,
+  nextText: string,
+  contentComparator?: ManagedTextComparator,
+): boolean {
+  return contentComparator
+    ? contentComparator(currentText, nextText)
+    : currentText === nextText;
+}
+
 async function readManagedTextFileState(
   filePath: string,
 ): Promise<ManagedTextFileState> {
   try {
     const targetStats = await lstat(filePath);
-
-    if (targetStats.isDirectory()) {
-      throw new Error(`Refusing to overwrite directory ${filePath}.`);
-    }
-
-    if (targetStats.isSymbolicLink()) {
-      throw new Error(`Refusing to overwrite symlink ${filePath}.`);
-    }
+    assertSafeManagedFileTarget(filePath, targetStats);
 
     return {
       exists: true,
@@ -127,6 +132,28 @@ async function readManagedTextFileState(
   }
 }
 
-async function assertSafeFileTarget(filePath: string): Promise<void> {
-  await readManagedTextFileState(filePath);
+function assertSafeManagedFileTarget(
+  filePath: string,
+  targetStats: Awaited<ReturnType<typeof lstat>>,
+): void {
+  if (targetStats.isDirectory()) {
+    throw new Error(`Refusing to overwrite directory ${filePath}.`);
+  }
+
+  if (targetStats.isSymbolicLink()) {
+    throw new Error(`Refusing to overwrite symlink ${filePath}.`);
+  }
+}
+
+async function assertSafeRollbackTarget(filePath: string): Promise<void> {
+  try {
+    const targetStats = await lstat(filePath);
+    assertSafeManagedFileTarget(filePath, targetStats);
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return;
+    }
+
+    throw error;
+  }
 }

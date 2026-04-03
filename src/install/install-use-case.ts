@@ -6,8 +6,8 @@ import {
 } from "./install-dependencies.js";
 import { commitInstallPlan } from "./install-commit.js";
 import {
+  createInstallSummary,
   prepareInstallPlan,
-  summarizePreparedInstallContext,
   type InstallSummary,
 } from "./install-state.js";
 import { type InstallScope } from "./settings-paths.js";
@@ -44,7 +44,7 @@ export async function runInstallUseCase(
   const writes = await commitInstallPlan(installPlan, dependencies.commit);
 
   return {
-    ...summarizePreparedInstallContext(installPlan.context),
+    ...createInstallSummary(installPlan.context),
     writes,
   };
 }

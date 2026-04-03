@@ -84,7 +84,7 @@ test("resolveInstallScope returns an exclude target for untracked local configs"
     details: {
       ...createLocalScopeDetails(testInstallPaths),
     },
-    localProjectConfigExcludeTarget: {
+    localProjectConfigIgnoreTarget: {
       gitDir: untrackedInspection.gitContext.gitDir,
       relativeConfigPath: untrackedInspection.relativeConfigPath,
     },
@@ -140,7 +140,7 @@ function createTrackedInspection(): TrackedLocalProjectConfigInspection {
 
 function createUntrackedInspection(): UntrackedLocalProjectConfigInspection {
   return {
-    excludeTarget: {
+    ignoreTarget: {
       gitDir: "/Users/test/project/.git",
       relativeConfigPath: ".codex/config.toml",
     },

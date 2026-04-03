@@ -3,7 +3,7 @@ import { createBackup } from "./backup.js";
 import { checkCodexAvailable } from "./codex-command.js";
 import { loadTomlConfig } from "./toml-config.js";
 import { inspectLocalProjectConfig } from "./local-project-config.js";
-import { ensureLocalProjectConfigExcluded } from "./local-git-ignore.js";
+import { ensureLocalProjectConfigIgnored } from "./local-git-ignore.js";
 import { commitInstallPlan } from "./install-commit.js";
 import { prepareInstallPlan, type InstallSummary } from "./install-state.js";
 import {
@@ -49,7 +49,7 @@ export interface InstallPlanningDependencies {
 
 export interface InstallCommitDependencies {
   createBackup: typeof createBackup;
-  ensureLocalProjectConfigExcluded: typeof ensureLocalProjectConfigExcluded;
+  ensureLocalProjectConfigIgnored: typeof ensureLocalProjectConfigIgnored;
   rollbackManagedTextFile: typeof rollbackManagedTextFile;
   writeManagedTextFile: typeof writeManagedTextFile;
 }
@@ -85,7 +85,7 @@ const baseInstallPlanningDependencies = {
 
 const baseInstallCommitDependencies = {
   createBackup,
-  ensureLocalProjectConfigExcluded,
+  ensureLocalProjectConfigIgnored,
   rollbackManagedTextFile,
   writeManagedTextFile,
 } satisfies InstallCommitDependencies;

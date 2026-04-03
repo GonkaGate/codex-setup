@@ -47,14 +47,6 @@ export interface PlanInstallManagedWritesInput {
   tokenCommand: TokenCommandConfig;
 }
 
-interface ManagedWritePlanningContext extends PlanInstallManagedWritesInput {}
-
-const INSTALL_MANAGED_WRITE_PHASE_ORDER = [
-  "credentials",
-  "catalog",
-  "config",
-] as const satisfies readonly PlannedManagedWritePhaseName[];
-
 const CONFIG_WRITE_KIND_BY_TARGET = {
   project: "project_config",
   user: "user_config",
@@ -70,35 +62,25 @@ export async function planInstallManagedWrites(
 export async function planInstallManagedWritePhases(
   input: PlanInstallManagedWritesInput,
 ): Promise<PlannedManagedWritePhase[]> {
-  const phasesByName = {
-    credentials: planCredentialManagedWritePhase(input),
-    catalog: planCatalogManagedWritePhase(input),
+  return [
+    {
+      name: "credentials",
+      writes: [planTokenManagedWrite(input), planHelperManagedWrite(input)],
+    },
+    {
+      name: "catalog",
+      writes: [planModelCatalogManagedWrite(input)],
+    },
     // Commit and rollback semantics depend on this phase sequence staying explicit.
-    config: await planConfigManagedWritePhase(input),
-  } satisfies Record<PlannedManagedWritePhaseName, PlannedManagedWritePhase>;
-
-  return INSTALL_MANAGED_WRITE_PHASE_ORDER.map((name) => phasesByName[name]);
-}
-
-function planCredentialManagedWritePhase(
-  context: ManagedWritePlanningContext,
-): PlannedManagedWritePhase {
-  return createManagedWritePhase("credentials", [
-    planTokenManagedWrite(context),
-    planHelperManagedWrite(context),
-  ]);
-}
-
-function planCatalogManagedWritePhase(
-  context: ManagedWritePlanningContext,
-): PlannedManagedWritePhase {
-  return createManagedWritePhase("catalog", [
-    planModelCatalogManagedWrite(context),
-  ]);
+    {
+      name: "config",
+      writes: await planConfigManagedWrites(input),
+    },
+  ];
 }
 
 function planTokenManagedWrite(
-  context: ManagedWritePlanningContext,
+  context: PlanInstallManagedWritesInput,
 ): PlannedManagedWrite {
   return createManagedWritePlan(
     "token",
@@ -109,7 +91,7 @@ function planTokenManagedWrite(
 }
 
 function planHelperManagedWrite(
-  context: ManagedWritePlanningContext,
+  context: PlanInstallManagedWritesInput,
 ): PlannedManagedWrite {
   return createManagedWritePlan(
     "token_helper",
@@ -120,7 +102,7 @@ function planHelperManagedWrite(
 }
 
 function planModelCatalogManagedWrite(
-  context: ManagedWritePlanningContext,
+  context: PlanInstallManagedWritesInput,
 ): PlannedManagedWrite {
   return createManagedWritePlan(
     "model_catalog",
@@ -130,9 +112,9 @@ function planModelCatalogManagedWrite(
   );
 }
 
-async function planConfigManagedWritePhase(
-  context: ManagedWritePlanningContext,
-): Promise<PlannedManagedWritePhase> {
+async function planConfigManagedWrites(
+  context: PlanInstallManagedWritesInput,
+): Promise<PlannedManagedWrite[]> {
   const configPlan = await planInstallConfigWrites({
     configLayers: context.configLayers,
     loadTomlConfig: context.loadTomlConfig,
@@ -141,10 +123,7 @@ async function planConfigManagedWritePhase(
     tokenCommand: context.tokenCommand,
   });
 
-  return createManagedWritePhase(
-    "config",
-    configPlan.map((entry) => prepareTomlConfigWrite(entry)),
-  );
+  return configPlan.map((entry) => prepareTomlConfigWrite(entry));
 }
 
 function prepareTomlConfigWrite(
@@ -159,16 +138,6 @@ function prepareTomlConfigWrite(
     OWNER_READ_WRITE_MODE,
     managedTomlWrite.contentComparator,
   );
-}
-
-function createManagedWritePhase(
-  name: PlannedManagedWritePhaseName,
-  writes: readonly PlannedManagedWrite[],
-): PlannedManagedWritePhase {
-  return {
-    name,
-    writes,
-  };
 }
 
 function createManagedWritePlan(

@@ -7,16 +7,16 @@ import {
   requireRepoRelativePath,
 } from "./git-context.js";
 
-export interface RepositoryLocalProjectConfigTarget {
+export interface RepositoryLocalProjectConfigLocation {
   gitContext: GitContext;
   relativeConfigPath: string;
 }
 
-export async function resolveRepositoryLocalProjectConfigTarget(
-  targetPath: string,
-): Promise<RepositoryLocalProjectConfigTarget | null> {
-  const gitContext = await findGitContext(path.dirname(targetPath));
-  await assertSafeLocalProjectConfigPath(targetPath, gitContext?.repoRoot);
+export async function resolveRepositoryLocalProjectConfigLocation(
+  projectConfigPath: string,
+): Promise<RepositoryLocalProjectConfigLocation | null> {
+  const gitContext = await findGitContext(path.dirname(projectConfigPath));
+  await assertSafeProjectConfigPath(projectConfigPath, gitContext?.repoRoot);
 
   if (!gitContext) {
     return null;
@@ -25,24 +25,24 @@ export async function resolveRepositoryLocalProjectConfigTarget(
   return {
     gitContext,
     relativeConfigPath: requireRepoRelativePath(
-      targetPath,
+      projectConfigPath,
       gitContext.repoRoot,
     ),
   };
 }
 
-async function assertSafeLocalProjectConfigPath(
-  targetPath: string,
+async function assertSafeProjectConfigPath(
+  projectConfigPath: string,
   repoRoot?: string,
 ): Promise<void> {
   const pathsToInspect = repoRoot
-    ? getPathsFromRepoRoot(repoRoot, targetPath)
-    : [path.dirname(targetPath), targetPath];
+    ? listPathsBetweenRepoRootAndConfig(repoRoot, projectConfigPath)
+    : [path.dirname(projectConfigPath), projectConfigPath];
 
-  for (const currentPath of pathsToInspect) {
+  for (const pathToInspect of pathsToInspect) {
     await assertPathIsNotSymlink(
-      currentPath,
-      getSymlinkErrorMessage(currentPath, targetPath, repoRoot),
+      pathToInspect,
+      buildSymlinkErrorMessage(pathToInspect, projectConfigPath, repoRoot),
     );
   }
 }
@@ -68,8 +68,14 @@ async function assertPathIsNotSymlink(
 
 // Walk every path component between the repo root and the config file so local
 // scope cannot write through a symlinked intermediate directory.
-function getPathsFromRepoRoot(repoRoot: string, targetPath: string): string[] {
-  const relativeConfigPath = requireRepoRelativePath(targetPath, repoRoot);
+function listPathsBetweenRepoRootAndConfig(
+  repoRoot: string,
+  projectConfigPath: string,
+): string[] {
+  const relativeConfigPath = requireRepoRelativePath(
+    projectConfigPath,
+    repoRoot,
+  );
   const targetSegments = relativeConfigPath
     .split(path.sep)
     .filter((segment) => segment.length > 0);
@@ -84,21 +90,21 @@ function getPathsFromRepoRoot(repoRoot: string, targetPath: string): string[] {
   return paths;
 }
 
-function getSymlinkErrorMessage(
-  currentPath: string,
-  targetPath: string,
+function buildSymlinkErrorMessage(
+  pathToInspect: string,
+  projectConfigPath: string,
   repoRoot?: string,
 ): string {
-  if (currentPath === path.dirname(targetPath)) {
+  if (pathToInspect === path.dirname(projectConfigPath)) {
     return 'Refusing to write local Codex config into a symlinked ".codex" directory.';
   }
 
-  if (currentPath === targetPath) {
+  if (pathToInspect === projectConfigPath) {
     return "Refusing to overwrite local Codex config through a symlinked file.";
   }
 
   const label = repoRoot
-    ? path.relative(repoRoot, currentPath) || path.basename(currentPath)
-    : currentPath;
+    ? path.relative(repoRoot, pathToInspect) || path.basename(pathToInspect)
+    : pathToInspect;
   return `Refusing local Codex setup through a symlinked path component: ${label}.`;
 }

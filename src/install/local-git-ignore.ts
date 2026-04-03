@@ -1,23 +1,23 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildBackupGlob } from "./backup.js";
-import type { LocalProjectConfigExcludeTarget } from "./local-project-config.js";
+import type { LocalProjectConfigIgnoreTarget } from "./local-project-config.js";
 import { isMissingFileError } from "./error-codes.js";
 
-export async function ensureLocalProjectConfigExcluded(
-  excludeTarget: LocalProjectConfigExcludeTarget | undefined,
+export async function ensureLocalProjectConfigIgnored(
+  ignoreTarget: LocalProjectConfigIgnoreTarget | undefined,
 ): Promise<void> {
-  if (!excludeTarget) {
+  if (!ignoreTarget) {
     return;
   }
 
-  await ensureConfigPathIgnored(
-    excludeTarget.gitDir,
-    excludeTarget.relativeConfigPath,
+  await ensureConfigPathIgnoredInRepository(
+    ignoreTarget.gitDir,
+    ignoreTarget.relativeConfigPath,
   );
 }
 
-async function ensureConfigPathIgnored(
+async function ensureConfigPathIgnoredInRepository(
   gitDir: string,
   relativeConfigPath: string,
 ): Promise<void> {

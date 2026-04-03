@@ -1,5 +1,5 @@
 import {
-  type LocalProjectConfigExcludeTarget,
+  type LocalProjectConfigIgnoreTarget,
   type LocalProjectConfigInspection,
 } from "./local-project-config.js";
 import type { TrackedLocalConfigAction } from "./prompts.js";
@@ -23,7 +23,7 @@ export interface ScopeDetails {
 export interface ScopeResolution {
   configLayers: readonly ScopeConfigLayer[];
   details: ScopeDetails;
-  localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget;
+  localProjectConfigIgnoreTarget?: LocalProjectConfigIgnoreTarget;
 }
 
 export interface ResolveInstallScopeInput {
@@ -67,21 +67,21 @@ export async function resolveInstallScope(
     return createUserScopeResolution(false);
   }
 
-  const localProjectConfigInspection = await input.inspectLocalProjectConfig(
+  const projectConfigInspection = await input.inspectLocalProjectConfig(
     input.installPaths.projectConfigPath,
   );
 
-  switch (localProjectConfigInspection.kind) {
+  switch (projectConfigInspection.kind) {
     case "outside_repo":
       return createLocalScopeResolution(input.installPaths);
     case "untracked":
       return createLocalScopeResolution(
         input.installPaths,
-        localProjectConfigInspection.excludeTarget,
+        projectConfigInspection.ignoreTarget,
       );
     case "tracked": {
       const action = await input.promptForTrackedLocalConfigAction(
-        localProjectConfigInspection.relativeConfigPath,
+        projectConfigInspection.relativeConfigPath,
       );
 
       if (action === "user") {
@@ -130,13 +130,13 @@ function createUserScopeResolution(
 
 function createLocalScopeResolution(
   installPaths: Pick<InstallPaths, "projectConfigPath" | "projectRoot">,
-  localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget,
+  localProjectConfigIgnoreTarget?: LocalProjectConfigIgnoreTarget,
 ): ScopeResolution {
   return {
     configLayers: getScopeConfigLayers("local"),
     details: createLocalScopeDetails(installPaths),
-    ...(localProjectConfigExcludeTarget
-      ? { localProjectConfigExcludeTarget }
+    ...(localProjectConfigIgnoreTarget
+      ? { localProjectConfigIgnoreTarget }
       : {}),
   };
 }

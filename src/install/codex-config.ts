@@ -54,32 +54,10 @@ export interface PlanInstallConfigWritesInput {
   tokenCommand: TokenCommandConfig;
 }
 
-interface ConfigPlanBuildContext {
-  paths: ConfigPathsInput;
-  selectedModel: SupportedModel;
-  tokenCommand: TokenCommandConfig;
-}
-
-type ConfigPatchBuilder = (context: ConfigPlanBuildContext) => TomlTable;
-
-const CONFIG_FILE_PATH_RESOLVERS: Record<
-  ConfigLayerTarget,
-  (paths: ConfigLayerPaths) => string
-> = {
-  project: (paths) => paths.projectConfigPath,
-  user: (paths) => paths.userConfigPath,
-};
-
-const CONFIG_PATCH_BUILDERS: Record<ConfigLayerRole, ConfigPatchBuilder> = {
-  activation: buildActivationLayerPatch,
-  provider: buildProviderLayerPatch,
-  trust: buildLocalTrustLayerPatch,
-};
-
 export async function planInstallConfigWrites(
   input: PlanInstallConfigWritesInput,
 ): Promise<ConfigFilePlanEntry[]> {
-  const currentConfigs = await loadCurrentConfigsForLayers(
+  const currentConfigs = await loadCurrentConfigsByTarget(
     input.configLayers,
     input.paths,
     input.loadTomlConfig,
@@ -100,20 +78,15 @@ export async function planInstallConfigWrites(
 export function buildInstallConfigPlan(
   input: BuildInstallConfigPlanInput,
 ): ConfigLayerPlanEntry[] {
-  const context = createConfigPlanBuildContext(input);
   const targetsInOrder = getConfigLayerTargetsInOrder(input.configLayers);
   const plannedConfigsByTarget: Partial<Record<ConfigLayerTarget, TomlTable>> =
-    {};
-
-  for (const target of targetsInOrder) {
-    plannedConfigsByTarget[target] = input.currentConfigs[target] ?? {};
-  }
+    initializeConfigsByTarget(targetsInOrder, input.currentConfigs);
 
   for (const configLayer of input.configLayers) {
     const currentConfig = plannedConfigsByTarget[configLayer.target] ?? {};
     plannedConfigsByTarget[configLayer.target] = mergeTomlTables(
       currentConfig,
-      buildConfigLayerPatch(configLayer, context),
+      buildConfigLayerPatch(configLayer, input),
     );
   }
 
@@ -123,20 +96,7 @@ export function buildInstallConfigPlan(
   }));
 }
 
-function createConfigPlanBuildContext(
-  input: Pick<
-    BuildInstallConfigPlanInput,
-    "paths" | "selectedModel" | "tokenCommand"
-  >,
-): ConfigPlanBuildContext {
-  return {
-    paths: input.paths,
-    selectedModel: input.selectedModel,
-    tokenCommand: input.tokenCommand,
-  };
-}
-
-async function loadCurrentConfigsForLayers(
+async function loadCurrentConfigsByTarget(
   configLayers: readonly ScopeConfigLayer[],
   paths: ConfigLayerPaths,
   loadTomlConfig: (filePath: string) => Promise<LoadedTomlConfig>,
@@ -149,6 +109,19 @@ async function loadCurrentConfigsForLayers(
   }
 
   return currentConfigs;
+}
+
+function initializeConfigsByTarget(
+  targetsInOrder: readonly ConfigLayerTarget[],
+  currentConfigs: Partial<Record<ConfigLayerTarget, TomlTable>>,
+): Partial<Record<ConfigLayerTarget, TomlTable>> {
+  const configsByTarget: Partial<Record<ConfigLayerTarget, TomlTable>> = {};
+
+  for (const target of targetsInOrder) {
+    configsByTarget[target] = currentConfigs[target] ?? {};
+  }
+
+  return configsByTarget;
 }
 
 function getConfigLayerTargetsInOrder(
@@ -167,40 +140,47 @@ function getConfigLayerTargetsInOrder(
 
 function buildConfigLayerPatch(
   configLayer: ScopeConfigLayer,
-  context: ConfigPlanBuildContext,
+  input: Pick<
+    BuildInstallConfigPlanInput,
+    "paths" | "selectedModel" | "tokenCommand"
+  >,
 ): TomlTable {
-  return mergeTomlPatches(
-    ...configLayer.roles.map((role) => CONFIG_PATCH_BUILDERS[role](context)),
-  );
+  let patch: TomlTable = {};
+
+  for (const role of configLayer.roles) {
+    patch = mergeTomlTables(patch, buildConfigPatchForRole(role, input));
+  }
+
+  return patch;
 }
 
 function resolveConfigLayerFilePath(
   target: ConfigLayerTarget,
   paths: ConfigLayerPaths,
 ): string {
-  return CONFIG_FILE_PATH_RESOLVERS[target](paths);
-}
-
-function mergeTomlPatches(...patches: readonly TomlTable[]): TomlTable {
-  let nextPatch: TomlTable = {};
-
-  for (const patch of patches) {
-    nextPatch = mergeTomlTables(nextPatch, patch);
+  switch (target) {
+    case "project":
+      return paths.projectConfigPath;
+    case "user":
+      return paths.userConfigPath;
   }
-
-  return nextPatch;
 }
 
-function buildActivationLayerPatch(context: ConfigPlanBuildContext): TomlTable {
-  return buildActivationConfigPatch(context.selectedModel, context.paths);
-}
-
-function buildProviderLayerPatch(context: ConfigPlanBuildContext): TomlTable {
-  return buildProviderConfigPatch(context.paths, context.tokenCommand);
-}
-
-function buildLocalTrustLayerPatch(context: ConfigPlanBuildContext): TomlTable {
-  return buildLocalTrustConfigPatch(context.paths.projectRoot);
+function buildConfigPatchForRole(
+  role: ConfigLayerRole,
+  input: Pick<
+    BuildInstallConfigPlanInput,
+    "paths" | "selectedModel" | "tokenCommand"
+  >,
+): TomlTable {
+  switch (role) {
+    case "activation":
+      return buildActivationConfigPatch(input.selectedModel, input.paths);
+    case "provider":
+      return buildProviderConfigPatch(input.paths, input.tokenCommand);
+    case "trust":
+      return buildLocalTrustConfigPatch(input.paths.projectRoot);
+  }
 }
 
 function buildActivationConfigPatch(

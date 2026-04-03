@@ -3,8 +3,8 @@ import { promisify } from "node:util";
 import { hasErrorCode } from "./error-codes.js";
 import type { GitContext } from "./git-context.js";
 import {
-  resolveRepositoryLocalProjectConfigTarget,
-  type RepositoryLocalProjectConfigTarget,
+  resolveRepositoryLocalProjectConfigLocation,
+  type RepositoryLocalProjectConfigLocation,
 } from "./local-project-config-target.js";
 
 const execFileAsync = promisify(execFile);
@@ -20,13 +20,13 @@ export interface TrackedLocalProjectConfigInspection {
 }
 
 export interface UntrackedLocalProjectConfigInspection {
-  excludeTarget: LocalProjectConfigExcludeTarget;
+  ignoreTarget: LocalProjectConfigIgnoreTarget;
   gitContext: GitContext;
   kind: "untracked";
   relativeConfigPath: string;
 }
 
-export interface LocalProjectConfigExcludeTarget {
+export interface LocalProjectConfigIgnoreTarget {
   gitDir: string;
   relativeConfigPath: string;
 }
@@ -36,58 +36,51 @@ export type LocalProjectConfigInspection =
   | TrackedLocalProjectConfigInspection
   | UntrackedLocalProjectConfigInspection;
 
-type RepositoryLocalProjectConfigTracking =
+type RepositoryLocalProjectConfigStatus =
   | { kind: "tracked" }
   | {
-      excludeTarget: LocalProjectConfigExcludeTarget;
+      ignoreTarget: LocalProjectConfigIgnoreTarget;
       kind: "untracked";
     };
 
-type LocalProjectConfigTrackingKind =
-  RepositoryLocalProjectConfigTracking["kind"];
+type RepositoryLocalProjectConfigStatusKind =
+  RepositoryLocalProjectConfigStatus["kind"];
 
 export async function inspectLocalProjectConfig(
-  targetPath: string,
+  projectConfigPath: string,
 ): Promise<LocalProjectConfigInspection> {
-  const repositoryTarget =
-    await resolveRepositoryLocalProjectConfigTarget(targetPath);
+  const repositoryConfig =
+    await resolveRepositoryLocalProjectConfigLocation(projectConfigPath);
 
-  if (!repositoryTarget) {
+  if (!repositoryConfig) {
     return {
       kind: "outside_repo",
     };
   }
 
-  const tracking =
-    await inspectRepositoryLocalProjectConfigTracking(repositoryTarget);
+  const status =
+    await inspectRepositoryLocalProjectConfigStatus(repositoryConfig);
 
-  return createRepositoryConfigInspection(repositoryTarget, tracking);
-}
-
-function createRepositoryConfigInspection(
-  target: RepositoryLocalProjectConfigTarget,
-  tracking: RepositoryLocalProjectConfigTracking,
-): TrackedLocalProjectConfigInspection | UntrackedLocalProjectConfigInspection {
-  if (tracking.kind === "tracked") {
+  if (status.kind === "tracked") {
     return {
-      ...target,
+      ...repositoryConfig,
       kind: "tracked",
     };
   }
 
   return {
-    ...target,
-    excludeTarget: tracking.excludeTarget,
+    ...repositoryConfig,
+    ignoreTarget: status.ignoreTarget,
     kind: "untracked",
   };
 }
 
-async function inspectRepositoryLocalProjectConfigTracking(
-  target: RepositoryLocalProjectConfigTarget,
-): Promise<RepositoryLocalProjectConfigTracking> {
-  const kind = await getLocalProjectConfigTrackingKind(
-    target.relativeConfigPath,
-    target.gitContext.repoRoot,
+async function inspectRepositoryLocalProjectConfigStatus(
+  repositoryConfig: RepositoryLocalProjectConfigLocation,
+): Promise<RepositoryLocalProjectConfigStatus> {
+  const kind = await getRepositoryLocalProjectConfigStatusKind(
+    repositoryConfig.relativeConfigPath,
+    repositoryConfig.gitContext.repoRoot,
   );
 
   if (kind === "tracked") {
@@ -97,24 +90,24 @@ async function inspectRepositoryLocalProjectConfigTracking(
   }
 
   return {
-    excludeTarget: {
-      gitDir: target.gitContext.gitDir,
-      relativeConfigPath: target.relativeConfigPath,
+    ignoreTarget: {
+      gitDir: repositoryConfig.gitContext.gitDir,
+      relativeConfigPath: repositoryConfig.relativeConfigPath,
     },
     kind,
   };
 }
 
-async function getLocalProjectConfigTrackingKind(
+async function getRepositoryLocalProjectConfigStatusKind(
   relativeConfigPath: string,
   repoRoot: string,
-): Promise<LocalProjectConfigTrackingKind> {
-  return (await isTrackedPath(relativeConfigPath, repoRoot))
+): Promise<RepositoryLocalProjectConfigStatusKind> {
+  return (await isRepositoryPathTracked(relativeConfigPath, repoRoot))
     ? "tracked"
     : "untracked";
 }
 
-async function isTrackedPath(
+async function isRepositoryPathTracked(
   relativeConfigPath: string,
   repoRoot: string,
 ): Promise<boolean> {

@@ -20,10 +20,10 @@ export async function commitInstallPlan(
   const writes: ManagedWriteResult[] = [];
 
   try {
-    if (installPlan.state.localProjectConfigExcludeTarget) {
+    if (installPlan.state.localProjectConfigIgnoreTarget) {
       // Keep the repo-local config ignored only once the install is ready to commit.
-      await dependencies.ensureLocalProjectConfigExcluded(
-        installPlan.state.localProjectConfigExcludeTarget,
+      await dependencies.ensureLocalProjectConfigIgnored(
+        installPlan.state.localProjectConfigIgnoreTarget,
       );
     }
 

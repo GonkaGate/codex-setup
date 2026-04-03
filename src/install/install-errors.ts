@@ -5,6 +5,8 @@ export interface InstallRollbackFailure {
   message: string;
 }
 
+export const INSTALL_CANCELLED_MESSAGE = "Installation cancelled.";
+
 export class PromptError extends Error {
   readonly code: string;
 
@@ -13,6 +15,12 @@ export class PromptError extends Error {
     this.name = "PromptError";
     this.code = code;
   }
+}
+
+export function createInstallCancelledError(
+  options?: ErrorOptions,
+): PromptError {
+  return new PromptError("cancelled", INSTALL_CANCELLED_MESSAGE, options);
 }
 
 export class InstallCommitError extends Error {

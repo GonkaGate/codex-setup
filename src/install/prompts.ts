@@ -1,7 +1,7 @@
 import process from "node:process";
 import { password, select } from "@inquirer/prompts";
 import type { SupportedModel, SupportedModelKey } from "../constants/models.js";
-import { PromptError } from "./install-errors.js";
+import { createInstallCancelledError, PromptError } from "./install-errors.js";
 import type { InstallScope } from "./settings-paths.js";
 
 export type TrackedLocalConfigAction = "user" | "cancel";
@@ -182,7 +182,7 @@ function rethrowPromptExit(error: unknown): never {
     error instanceof Error &&
     (error.name === "ExitPromptError" || error.name === "AbortPromptError")
   ) {
-    throw new PromptError("cancelled", "Installation cancelled.", {
+    throw createInstallCancelledError({
       cause: error,
     });
   }

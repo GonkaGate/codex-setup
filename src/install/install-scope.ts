@@ -1,7 +1,6 @@
-import {
-  type LocalProjectConfigExcludeTarget,
-  type LocalProjectConfigInspection,
-} from "./local-project-config.js";
+import { type LocalProjectConfigExcludeTarget } from "./local-project-config.js";
+import { createInstallCancelledError } from "./install-errors.js";
+import type { LocalProjectConfigInspection } from "./local-project-config.js";
 import type { TrackedLocalConfigAction } from "./prompts.js";
 import type { InstallPaths, InstallScope } from "./settings-paths.js";
 
@@ -79,7 +78,7 @@ async function resolveLocalScopeRequest(
         return createUserScopeResolution(true);
       }
 
-      throw new Error("Installation cancelled.");
+      throw createInstallCancelledError();
     }
   }
 }

@@ -9,7 +9,6 @@ import {
 import { DEFAULT_MODEL } from "../src/constants/models.js";
 import { buildBackupGlob } from "../src/install/backup.js";
 import { InstallCommitError } from "../src/install/install-errors.js";
-import { createTokenCommandConfig } from "../src/install/token-helper.js";
 import { createInstallScenario } from "./helpers/install-scenario.js";
 import {
   DEFAULT_TEST_API_KEY,
@@ -154,7 +153,7 @@ test("local scope keeps activation in the project file and trusts the repo root"
   assert.equal(outcome.finalScope, "local");
   assert.equal(
     outcome.projectConfigPath,
-    path.join(scenario.workspace, ".codex", "config.toml"),
+    scenario.installPaths.projectConfigPath,
   );
   assert.equal(outcome.trustTargetPath, scenario.workspace);
 
@@ -219,10 +218,7 @@ test("tracked local config switches to user scope when requested", async () => {
   assert.equal(outcome.switchedToUserScope, true);
   assert.equal(outcome.projectConfigPath, undefined);
   assert.equal(
-    await readFile(
-      path.join(scenario.workspace, ".codex", "config.toml"),
-      "utf8",
-    ),
+    await readFile(scenario.installPaths.projectConfigPath, "utf8"),
     'model_provider = "openai"\n',
   );
 });
@@ -237,11 +233,7 @@ test("tracked local config can cancel without touching config files or git exclu
 
   const excludePath = path.join(scenario.workspace, ".git", "info", "exclude");
   const initialExcludeText = await readFile(excludePath, "utf8");
-  const trackedConfigPath = path.join(
-    scenario.workspace,
-    ".codex",
-    "config.toml",
-  );
+  const trackedConfigPath = scenario.installPaths.projectConfigPath;
 
   await assert.rejects(() => scenario.run(), /Installation cancelled\./);
 
@@ -250,7 +242,7 @@ test("tracked local config can cancel without touching config files or git exclu
     'model_provider = "openai"\n',
   );
   await assert.rejects(
-    () => readFile(path.join(scenario.codexHome, "config.toml"), "utf8"),
+    () => readFile(scenario.installPaths.userConfigPath, "utf8"),
     /ENOENT/,
   );
   assert.equal(await readFile(excludePath, "utf8"), initialExcludeText);
@@ -265,20 +257,16 @@ test("existing user config and token files are preserved via backups before over
     recursive: true,
   });
   await writeFile(
-    path.join(scenario.codexHome, "config.toml"),
+    scenario.installPaths.userConfigPath,
     ['model = "gpt-5.3-codex"', "", "[analytics]", "enabled = false", ""].join(
       "\n",
     ),
     "utf8",
   );
-  await mkdir(path.join(scenario.codexHome, "gonkagate"), {
+  await mkdir(path.dirname(scenario.installPaths.tokenPath), {
     recursive: true,
   });
-  await writeFile(
-    path.join(scenario.codexHome, "gonkagate", "token"),
-    "gp-old-key\n",
-    "utf8",
-  );
+  await writeFile(scenario.installPaths.tokenPath, "gp-old-key\n", "utf8");
 
   const outcome = await scenario.run();
 
@@ -369,24 +357,19 @@ test("commit failures roll back completed managed writes and preserve prior file
     scope: "user",
   });
   const baseDependencies = scenario.createDependencies();
-  const tokenPath = path.join(scenario.codexHome, "gonkagate", "token");
-  const helperPath = createTokenCommandConfig({
-    codexHome: scenario.codexHome,
-    nodeExecutable: process.execPath,
-    platform: process.platform,
-    tokenPath,
-  }).helperFilePath;
+  const tokenPath = scenario.installPaths.tokenPath;
+  const helperPath = scenario.tokenCommand.helperFilePath;
   await writeFile(
-    path.join(scenario.codexHome, "config.toml"),
+    scenario.installPaths.userConfigPath,
     'model = "openai"\n',
     "utf8",
   );
-  await mkdir(path.join(scenario.codexHome, "gonkagate"), {
+  await mkdir(path.dirname(tokenPath), {
     recursive: true,
   });
   await writeFile(tokenPath, "gp-old-key\n", "utf8");
 
-  const failingUserConfigPath = path.join(scenario.codexHome, "config.toml");
+  const failingUserConfigPath = scenario.installPaths.userConfigPath;
   const dependencies = scenario.createDependencies({
     commit: {
       writeManagedTextFile: async (filePath, content, options) => {
@@ -419,11 +402,7 @@ test("commit failures roll back completed managed writes and preserve prior file
       assert.equal(error.completedWrites.length, 3);
       assert.deepEqual(
         error.completedWrites.map((write) => write.filePath),
-        [
-          tokenPath,
-          helperPath,
-          path.join(scenario.codexHome, "model-catalogs", "gonkagate.json"),
-        ],
+        [tokenPath, helperPath, scenario.installPaths.modelCatalogPath],
       );
       assert.deepEqual(error.rollbackFailures, []);
       return true;
@@ -433,12 +412,11 @@ test("commit failures roll back completed managed writes and preserve prior file
   assert.equal(await readFile(tokenPath, "utf8"), "gp-old-key\n");
   await assert.rejects(() => stat(helperPath), /ENOENT/);
   await assert.rejects(
-    () =>
-      stat(path.join(scenario.codexHome, "model-catalogs", "gonkagate.json")),
+    () => stat(scenario.installPaths.modelCatalogPath),
     /ENOENT/,
   );
   assert.equal(
-    await readFile(path.join(scenario.codexHome, "config.toml"), "utf8"),
+    await readFile(scenario.installPaths.userConfigPath, "utf8"),
     'model = "openai"\n',
   );
 });
@@ -461,6 +439,6 @@ test("local scope resolves the git repo root even from nested directories", asyn
   assert.equal(outcome.trustTargetPath, scenario.workspace);
   assert.equal(
     outcome.projectConfigPath,
-    path.join(scenario.workspace, ".codex", "config.toml"),
+    scenario.installPaths.projectConfigPath,
   );
 });

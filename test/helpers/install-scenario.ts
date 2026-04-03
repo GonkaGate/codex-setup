@@ -1,5 +1,13 @@
 import { DEFAULT_MODEL } from "../../src/constants/models.js";
 import {
+  resolveInstallPaths,
+  type InstallPaths,
+} from "../../src/install/settings-paths.js";
+import {
+  createTokenCommandConfig,
+  type TokenCommandConfig,
+} from "../../src/install/token-helper.js";
+import {
   createInstallUseCaseDependencies,
   runInstallUseCase,
   type InstallOutcome,
@@ -38,7 +46,9 @@ export interface InstallScenario {
   createDependencies: (
     overrides?: InstallUseCaseDependencyOverrides,
   ) => InstallUseCaseDependencies;
+  installPaths: InstallPaths;
   run: (options?: InstallScenarioRunOptions) => Promise<InstallOutcome>;
+  tokenCommand: TokenCommandConfig;
   workspace: string;
 }
 
@@ -68,6 +78,20 @@ export async function createInstallScenario(
 ): Promise<InstallScenario> {
   const workspace = await createTempWorkspace(`codex-setup-${name}-workspace`);
   const codexHome = await createTempWorkspace(`codex-setup-${name}-home`);
+  const environment = {
+    ...process.env,
+    CODEX_HOME: codexHome,
+  };
+  const installPaths = resolveInstallPaths({
+    environment,
+    projectRoot: workspace,
+  });
+  const tokenCommand = createTokenCommandConfig({
+    codexHome: installPaths.codexHome,
+    nodeExecutable: process.execPath,
+    platform: process.platform,
+    tokenPath: installPaths.tokenPath,
+  });
 
   const createDependencies = (
     overrides: InstallUseCaseDependencyOverrides = {},
@@ -103,7 +127,9 @@ export async function createInstallScenario(
   return {
     codexHome,
     createDependencies,
+    installPaths,
     run,
+    tokenCommand,
     workspace,
   };
 }

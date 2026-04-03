@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PromptError } from "../src/install/install-errors.js";
 import {
   createLocalScopeDetails,
   createUserScopeDetails,
@@ -106,7 +107,17 @@ test("resolveInstallScope can cancel tracked local config installs", async () =>
         promptForTrackedLocalConfigAction: async () => "cancel",
         requestedScope: "local",
       }),
-    /Installation cancelled\./,
+    (error: unknown) => {
+      assert.equal(error instanceof PromptError, true);
+
+      if (!(error instanceof PromptError)) {
+        return false;
+      }
+
+      assert.equal(error.code, "cancelled");
+      assert.match(error.message, /Installation cancelled\./);
+      return true;
+    },
   );
 });
 

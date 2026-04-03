@@ -85,45 +85,33 @@ async function inspectRepositoryProjectConfig(
 ): Promise<
   TrackedLocalProjectConfigInspection | UntrackedLocalProjectConfigInspection
 > {
-  const trackedByGit = await isRepoPathTracked(
-    repositoryConfigLocation.repoRelativeConfigPath,
-    repositoryConfigLocation.gitContext.repoRoot,
+  return createRepositoryProjectConfigInspection(
+    repositoryConfigLocation,
+    await isRepoPathTracked(
+      repositoryConfigLocation.repoRelativeConfigPath,
+      repositoryConfigLocation.gitContext.repoRoot,
+    ),
   );
+}
 
+function createRepositoryProjectConfigInspection(
+  repositoryConfigLocation: RepositoryProjectConfigLocation,
+  trackedByGit: boolean,
+): TrackedLocalProjectConfigInspection | UntrackedLocalProjectConfigInspection {
   if (trackedByGit) {
-    return createTrackedLocalProjectConfigInspection(repositoryConfigLocation);
+    return {
+      ...repositoryConfigLocation,
+      kind: "tracked",
+    };
   }
 
-  return createUntrackedLocalProjectConfigInspection(repositoryConfigLocation);
-}
-
-function createTrackedLocalProjectConfigInspection(
-  repositoryConfigLocation: RepositoryProjectConfigLocation,
-): TrackedLocalProjectConfigInspection {
   return {
     ...repositoryConfigLocation,
-    kind: "tracked",
-  };
-}
-
-function createUntrackedLocalProjectConfigInspection(
-  repositoryConfigLocation: RepositoryProjectConfigLocation,
-): UntrackedLocalProjectConfigInspection {
-  return {
-    ...repositoryConfigLocation,
-    excludeTarget: buildLocalProjectConfigExcludeTarget(
-      repositoryConfigLocation,
-    ),
+    excludeTarget: {
+      gitDir: repositoryConfigLocation.gitContext.gitDir,
+      repoRelativeConfigPath: repositoryConfigLocation.repoRelativeConfigPath,
+    },
     kind: "untracked",
-  };
-}
-
-function buildLocalProjectConfigExcludeTarget(
-  repositoryConfigLocation: RepositoryProjectConfigLocation,
-): LocalProjectConfigExcludeTarget {
-  return {
-    gitDir: repositoryConfigLocation.gitContext.gitDir,
-    repoRelativeConfigPath: repositoryConfigLocation.repoRelativeConfigPath,
   };
 }
 

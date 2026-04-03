@@ -5,47 +5,63 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { CONTRACT_METADATA } from "../contract-metadata.js";
 import { readText } from "./contract-helpers.js";
+import {
+  expectJsonString,
+  expectJsonStringRecord,
+  parseJsonObject,
+} from "./helpers/structured-data.js";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 
 test("package metadata matches the installer contract", () => {
-  const packageJson = JSON.parse(readText("package.json")) as {
-    bin: Record<string, string>;
-    name: string;
-    scripts: Record<string, string>;
-    type: string;
-    version: string;
-  };
+  const packageJson = parseJsonObject(readText("package.json"), "package.json");
+  const packageJsonBin = expectJsonStringRecord(
+    packageJson.bin,
+    "packageJson.bin",
+  );
+  const packageJsonScripts = expectJsonStringRecord(
+    packageJson.scripts,
+    "packageJson.scripts",
+  );
 
-  assert.equal(packageJson.name, CONTRACT_METADATA.packageName);
-  assert.equal(packageJson.type, "module");
-  assert.equal(packageJson.version, CONTRACT_METADATA.cliVersion);
   assert.equal(
-    packageJson.bin[CONTRACT_METADATA.binName],
+    expectJsonString(packageJson.name, "packageJson.name"),
+    CONTRACT_METADATA.packageName,
+  );
+  assert.equal(
+    expectJsonString(packageJson.type, "packageJson.type"),
+    "module",
+  );
+  assert.equal(
+    expectJsonString(packageJson.version, "packageJson.version"),
+    CONTRACT_METADATA.cliVersion,
+  );
+  assert.equal(
+    packageJsonBin[CONTRACT_METADATA.binName],
     CONTRACT_METADATA.binPath,
   );
   assert.match(
-    packageJson.scripts["model-catalog:generate"],
+    packageJsonScripts["model-catalog:generate"],
     /scripts\/extract-model-catalog\.mjs/,
   );
   assert.match(
-    packageJson.scripts["contract:generate"],
+    packageJsonScripts["contract:generate"],
     /scripts\/generate-contract-files\.mjs/,
   );
   assert.match(
-    packageJson.scripts["contract:check"],
+    packageJsonScripts["contract:check"],
     /scripts\/check-contract-files\.mjs/,
   );
   assert.match(
-    packageJson.scripts["model-catalog:check"],
+    packageJsonScripts["model-catalog:check"],
     /scripts\/check-model-catalog\.mjs/,
   );
-  assert.match(packageJson.scripts.test, /npm run build/);
-  assert.match(packageJson.scripts.ci, /npm run typecheck/);
-  assert.match(packageJson.scripts.ci, /npm run test/);
-  assert.match(packageJson.scripts.ci, /npm run contract:check/);
-  assert.match(packageJson.scripts.ci, /npm run model-catalog:check/);
-  assert.match(packageJson.scripts.ci, /npm run package:check/);
+  assert.match(packageJsonScripts.test, /npm run build/);
+  assert.match(packageJsonScripts.ci, /npm run typecheck/);
+  assert.match(packageJsonScripts.ci, /npm run test/);
+  assert.match(packageJsonScripts.ci, /npm run contract:check/);
+  assert.match(packageJsonScripts.ci, /npm run model-catalog:check/);
+  assert.match(packageJsonScripts.ci, /npm run package:check/);
 });
 
 test("generated contract artifacts match their committed source snapshots", () => {

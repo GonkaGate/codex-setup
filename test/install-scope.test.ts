@@ -35,9 +35,7 @@ test("resolveInstallScope keeps user scope without local config inspection", asy
   });
 
   assert.deepEqual(resolution, {
-    details: {
-      ...createUserScopeDetails(false),
-    },
+    ...createUserScopeDetails(false),
   });
   assert.equal(inspectCount, 0);
   assert.equal(promptCount, 0);
@@ -59,9 +57,7 @@ test("resolveInstallScope keeps local scope when the project config is outside g
   });
 
   assert.deepEqual(resolution, {
-    details: {
-      ...createLocalScopeDetails(testInstallPaths),
-    },
+    ...createLocalScopeDetails(testInstallPaths),
   });
   assert.equal(promptCount, 0);
 });
@@ -77,9 +73,7 @@ test("resolveInstallScope returns an exclude target for untracked local configs"
   });
 
   assert.deepEqual(resolution, {
-    details: {
-      ...createLocalScopeDetails(testInstallPaths),
-    },
+    ...createLocalScopeDetails(testInstallPaths),
     localProjectConfigExcludeTarget: {
       gitDir: untrackedInspection.gitContext.gitDir,
       repoRelativeConfigPath: untrackedInspection.repoRelativeConfigPath,
@@ -102,9 +96,7 @@ test("resolveInstallScope switches tracked local config to user scope when reque
   });
 
   assert.deepEqual(resolution, {
-    details: {
-      ...createUserScopeDetails(true),
-    },
+    ...createUserScopeDetails(true),
   });
   assert.equal(promptTarget, trackedInspection.repoRelativeConfigPath);
 });

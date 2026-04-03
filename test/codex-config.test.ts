@@ -17,6 +17,11 @@ import {
   type TomlTable,
 } from "../src/install/toml-config.js";
 import type { TokenCommandConfig } from "../src/install/token-helper.js";
+import {
+  expectTomlBoolean,
+  expectTomlString,
+  expectTomlTable,
+} from "./helpers/structured-data.js";
 
 const testPaths: InstallConfigPaths = {
   codexHome: "/Users/test/.codex",
@@ -78,8 +83,15 @@ test("planInstallConfigWrites keeps user scope config ownership centralized", as
   assert.equal(userLayer.config.model_provider, GONKAGATE_PROVIDER_ID);
   assert.equal(userLayer.config.model, DEFAULT_MODEL.modelId);
   assert.equal(userLayer.config.model_catalog_json, testPaths.modelCatalogPath);
+  const analyticsConfig = expectTomlTable(
+    userLayer.config.analytics,
+    "userLayer.config.analytics",
+  );
   assert.equal(
-    (userLayer.config.analytics as Record<string, unknown>).enabled as boolean,
+    expectTomlBoolean(
+      analyticsConfig.enabled,
+      "userLayer.config.analytics.enabled",
+    ),
     false,
   );
 });
@@ -115,22 +127,38 @@ test("planInstallConfigWrites splits local scope across user and project layers"
 
   const userLayer = configPlan[0];
   const projectLayer = configPlan[1];
-  const userProjects = userLayer.config.projects as Record<string, unknown>;
+  const userProjects = expectTomlTable(
+    userLayer.config.projects,
+    "userLayer.config.projects",
+  );
+  const modelProviders = expectTomlTable(
+    userLayer.config.model_providers,
+    "userLayer.config.model_providers",
+  );
+  const gonkagateProvider = expectTomlTable(
+    modelProviders[GONKAGATE_PROVIDER_ID],
+    `userLayer.config.model_providers.${GONKAGATE_PROVIDER_ID}`,
+  );
+  const trustedProjectConfig = expectTomlTable(
+    userProjects[testPaths.projectRoot],
+    `userLayer.config.projects.${testPaths.projectRoot}`,
+  );
 
   assert.equal(userLayer.filePath, testLayerPaths.userConfigPath);
   assert.equal(userLayer.config.model_provider, undefined);
   assert.equal(userLayer.config.model, undefined);
   assert.equal(
-    (
-      (userLayer.config.model_providers as Record<string, unknown>)[
-        GONKAGATE_PROVIDER_ID
-      ] as Record<string, unknown>
-    ).name,
+    expectTomlString(
+      gonkagateProvider.name,
+      `userLayer.config.model_providers.${GONKAGATE_PROVIDER_ID}.name`,
+    ),
     GONKAGATE_PROVIDER_NAME,
   );
   assert.equal(
-    (userProjects[testPaths.projectRoot] as Record<string, unknown>)
-      .trust_level,
+    expectTomlString(
+      trustedProjectConfig.trust_level,
+      `userLayer.config.projects.${testPaths.projectRoot}.trust_level`,
+    ),
     "trusted",
   );
 

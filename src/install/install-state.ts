@@ -12,10 +12,11 @@ import {
 import {
   resolveInstallScope,
   type LocalScopeDetails,
+  type LocalScopeResolution,
   type ScopeResolution,
+  type UserScopeResolution,
   type UserScopeDetails,
 } from "./install-scope.js";
-import type { LocalProjectConfigExcludeTarget } from "./local-project-config.js";
 import {
   resolveInstallPaths,
   resolveProjectRoot,
@@ -61,14 +62,10 @@ interface PreparedInstallContextBase {
 }
 
 export interface PreparedUserInstallContext
-  extends PreparedInstallContextBase, UserScopeDetails {
-  localProjectConfigExcludeTarget?: never;
-}
+  extends PreparedInstallContextBase, UserScopeResolution {}
 
 export interface PreparedLocalInstallContext
-  extends PreparedInstallContextBase, LocalScopeDetails {
-  localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget;
-}
+  extends PreparedInstallContextBase, LocalScopeResolution {}
 
 export type PreparedInstallContext =
   | PreparedUserInstallContext
@@ -169,27 +166,14 @@ function createPreparedInstallContext(
   scopeResolution: ScopeResolution,
   tokenCommand: TokenCommandConfig,
 ): PreparedInstallContext {
-  const commonContext = {
+  return {
     apiKey: resolvedInputs.apiKey,
     codex: resolvedInputs.codex,
     installPaths,
     requestedScope: resolvedInputs.requestedScope,
     selectedModel: resolvedInputs.selectedModel,
     tokenCommand,
-  };
-
-  if (scopeResolution.details.finalScope === "user") {
-    return {
-      ...commonContext,
-      ...scopeResolution.details,
-    };
-  }
-
-  return {
-    ...commonContext,
-    ...scopeResolution.details,
-    localProjectConfigExcludeTarget:
-      scopeResolution.localProjectConfigExcludeTarget,
+    ...scopeResolution,
   };
 }
 

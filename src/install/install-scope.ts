@@ -23,13 +23,11 @@ export interface LocalScopeDetails {
 
 export type ScopeDetails = UserScopeDetails | LocalScopeDetails;
 
-export interface UserScopeResolution {
-  details: UserScopeDetails;
+export interface UserScopeResolution extends UserScopeDetails {
   localProjectConfigExcludeTarget?: never;
 }
 
-export interface LocalScopeResolution {
-  details: LocalScopeDetails;
+export interface LocalScopeResolution extends LocalScopeDetails {
   localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget;
 }
 
@@ -110,7 +108,7 @@ function createUserScopeResolution(
   switchedToUserScope: boolean,
 ): UserScopeResolution {
   return {
-    details: createUserScopeDetails(switchedToUserScope),
+    ...createUserScopeDetails(switchedToUserScope),
   };
 }
 
@@ -119,7 +117,7 @@ function createLocalScopeResolution(
   localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget,
 ): LocalScopeResolution {
   return {
-    details: createLocalScopeDetails(installPaths),
+    ...createLocalScopeDetails(installPaths),
     ...(localProjectConfigExcludeTarget
       ? { localProjectConfigExcludeTarget }
       : {}),

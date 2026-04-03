@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import TOML from "@iarna/toml";
 import {
   GONKAGATE_BASE_URL,
   GONKAGATE_PROVIDER_ID,
@@ -15,11 +14,18 @@ import {
   DEFAULT_TEST_API_KEY,
   createInstallScenario,
 } from "./helpers/install-scenario.js";
+import {
+  expectJsonArray,
+  expectJsonObject,
+  expectJsonString,
+  expectTomlBoolean,
+  expectTomlString,
+  expectTomlStringArray,
+  expectTomlTable,
+  parseJsonObject,
+  parseTomlTable,
+} from "./helpers/structured-data.js";
 import { initGitRepo, trackLocalProjectConfig } from "./helpers/workspace.js";
-
-function parseToml(text: string): Record<string, unknown> {
-  return TOML.parse(text) as Record<string, unknown>;
-}
 
 test("user scope writes GonkaGate provider, token helper, and curated catalog", async () => {
   const scenario = await createInstallScenario("user", {
@@ -32,24 +38,70 @@ test("user scope writes GonkaGate provider, token helper, and curated catalog", 
   assert.equal("configLayers" in outcome, false);
   assert.equal(outcome.projectConfigPath, undefined);
 
-  const userConfig = parseToml(await readFile(outcome.userConfigPath, "utf8"));
-  assert.equal(userConfig.model_provider, GONKAGATE_PROVIDER_ID);
-  assert.equal(userConfig.model, DEFAULT_MODEL.modelId);
-  assert.equal(userConfig.model_catalog_json, outcome.modelCatalogPath);
+  const userConfig = parseTomlTable(
+    await readFile(outcome.userConfigPath, "utf8"),
+  );
+  assert.equal(
+    expectTomlString(userConfig.model_provider, "userConfig.model_provider"),
+    GONKAGATE_PROVIDER_ID,
+  );
+  assert.equal(
+    expectTomlString(userConfig.model, "userConfig.model"),
+    DEFAULT_MODEL.modelId,
+  );
+  assert.equal(
+    expectTomlString(
+      userConfig.model_catalog_json,
+      "userConfig.model_catalog_json",
+    ),
+    outcome.modelCatalogPath,
+  );
 
-  const providers = userConfig.model_providers as Record<string, unknown>;
-  const provider = providers[GONKAGATE_PROVIDER_ID] as Record<string, unknown>;
-  const auth = provider.auth as Record<string, unknown>;
-  assert.equal(provider.base_url, GONKAGATE_BASE_URL);
-  assert.equal(provider.wire_api, "responses");
-  assert.equal(provider.supports_websockets, false);
-  assert.equal(auth.cwd, scenario.codexHome);
+  const providers = expectTomlTable(
+    userConfig.model_providers,
+    "userConfig.model_providers",
+  );
+  const provider = expectTomlTable(
+    providers[GONKAGATE_PROVIDER_ID],
+    `userConfig.model_providers.${GONKAGATE_PROVIDER_ID}`,
+  );
+  const auth = expectTomlTable(
+    provider.auth,
+    "userConfig.model_providers.gonkagate.auth",
+  );
+  assert.equal(
+    expectTomlString(provider.base_url, "provider.base_url"),
+    GONKAGATE_BASE_URL,
+  );
+  assert.equal(
+    expectTomlString(provider.wire_api, "provider.wire_api"),
+    "responses",
+  );
+  assert.equal(
+    expectTomlBoolean(
+      provider.supports_websockets,
+      "provider.supports_websockets",
+    ),
+    false,
+  );
+  assert.equal(
+    expectTomlString(auth.cwd, "provider.auth.cwd"),
+    scenario.codexHome,
+  );
 
   if (process.platform === "win32") {
-    assert.equal(auth.command, process.execPath);
-    assert.deepEqual(auth.args, [outcome.helperPath]);
+    assert.equal(
+      expectTomlString(auth.command, "provider.auth.command"),
+      process.execPath,
+    );
+    assert.deepEqual(expectTomlStringArray(auth.args, "provider.auth.args"), [
+      outcome.helperPath,
+    ]);
   } else {
-    assert.equal(auth.command, outcome.helperPath);
+    assert.equal(
+      expectTomlString(auth.command, "provider.auth.command"),
+      outcome.helperPath,
+    );
     assert.equal(auth.args, undefined);
   }
 
@@ -57,11 +109,21 @@ test("user scope writes GonkaGate provider, token helper, and curated catalog", 
     (await readFile(outcome.tokenPath, "utf8")).trim(),
     DEFAULT_TEST_API_KEY,
   );
-  const modelCatalog = JSON.parse(
+  const modelCatalog = parseJsonObject(
     await readFile(outcome.modelCatalogPath, "utf8"),
-  ) as { models: Array<{ slug: string }> };
+    "model catalog",
+  );
+  const modelCatalogModels = expectJsonArray(
+    modelCatalog.models,
+    "modelCatalog.models",
+  );
   assert.deepEqual(
-    modelCatalog.models.map((model) => model.slug),
+    modelCatalogModels.map((model, index) =>
+      expectJsonString(
+        expectJsonObject(model, `modelCatalog.models[${index}]`).slug,
+        `modelCatalog.models[${index}].slug`,
+      ),
+    ),
     [DEFAULT_MODEL.modelId],
   );
 
@@ -95,23 +157,43 @@ test("local scope keeps activation in the project file and trusts the repo root"
   );
   assert.equal(outcome.trustTargetPath, scenario.workspace);
 
-  const userConfig = parseToml(await readFile(outcome.userConfigPath, "utf8"));
+  const userConfig = parseTomlTable(
+    await readFile(outcome.userConfigPath, "utf8"),
+  );
   assert.equal(userConfig.model_provider, undefined);
   assert.equal(userConfig.model, undefined);
 
-  const projects = userConfig.projects as Record<string, unknown>;
-  const trustedProject = projects[scenario.workspace] as Record<
-    string,
-    unknown
-  >;
-  assert.equal(trustedProject.trust_level, "trusted");
+  const projects = expectTomlTable(userConfig.projects, "userConfig.projects");
+  const trustedProject = expectTomlTable(
+    projects[scenario.workspace],
+    `userConfig.projects.${scenario.workspace}`,
+  );
+  assert.equal(
+    expectTomlString(trustedProject.trust_level, "trustedProject.trust_level"),
+    "trusted",
+  );
 
-  const projectConfig = parseToml(
+  const projectConfig = parseTomlTable(
     await readFile(outcome.projectConfigPath, "utf8"),
   );
-  assert.equal(projectConfig.model_provider, GONKAGATE_PROVIDER_ID);
-  assert.equal(projectConfig.model, DEFAULT_MODEL.modelId);
-  assert.equal(projectConfig.model_catalog_json, outcome.modelCatalogPath);
+  assert.equal(
+    expectTomlString(
+      projectConfig.model_provider,
+      "projectConfig.model_provider",
+    ),
+    GONKAGATE_PROVIDER_ID,
+  );
+  assert.equal(
+    expectTomlString(projectConfig.model, "projectConfig.model"),
+    DEFAULT_MODEL.modelId,
+  );
+  assert.equal(
+    expectTomlString(
+      projectConfig.model_catalog_json,
+      "projectConfig.model_catalog_json",
+    ),
+    outcome.modelCatalogPath,
+  );
 
   const excludePath = path.join(scenario.workspace, ".git", "info", "exclude");
   const excludeText = await readFile(excludePath, "utf8");
@@ -209,10 +291,19 @@ test("existing user config and token files are preserved via backups before over
     assert.equal(backupStats.isFile(), true);
   }
 
-  const userConfig = parseToml(await readFile(outcome.userConfigPath, "utf8"));
-  assert.equal(userConfig.model, DEFAULT_MODEL.modelId);
+  const userConfig = parseTomlTable(
+    await readFile(outcome.userConfigPath, "utf8"),
+  );
   assert.equal(
-    (userConfig.analytics as Record<string, unknown>).enabled,
+    expectTomlString(userConfig.model, "userConfig.model"),
+    DEFAULT_MODEL.modelId,
+  );
+  const analyticsConfig = expectTomlTable(
+    userConfig.analytics,
+    "userConfig.analytics",
+  );
+  assert.equal(
+    expectTomlBoolean(analyticsConfig.enabled, "userConfig.analytics.enabled"),
     false,
   );
   assert.equal(

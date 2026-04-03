@@ -120,7 +120,7 @@ export async function promptForScope(
 }
 
 export async function promptForTrackedLocalConfigAction(
-  relativeTargetPath: string,
+  relativeConfigPath: string,
   selectPrompt: SelectPrompt<TrackedLocalConfigAction> = select as SelectPrompt<TrackedLocalConfigAction>,
 ): Promise<TrackedLocalConfigAction> {
   assertInteractiveTty();
@@ -144,7 +144,7 @@ export async function promptForTrackedLocalConfigAction(
     ],
     default: "user",
     loop: false,
-    message: `${relativeTargetPath} is already tracked by git. How should the installer continue?`,
+    message: `${relativeConfigPath} is already tracked by git. How should the installer continue?`,
     pageSize: 2,
     theme: {
       indexMode: "number",

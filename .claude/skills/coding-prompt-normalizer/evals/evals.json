@@ -3,12 +3,12 @@
   "evals": [
     {
       "id": 0,
-      "prompt": "Turn this into a prompt for Codex. Tighten `.claude/skills/coding-prompt-normalizer/SKILL.md` and `test/scaffold.test.ts` so the skill is Codex-specific, preserves `~/.codex/config.toml`, and removes stale legacy repo wording. Keep the change small and keep `.agents` in sync.",
+      "prompt": "Turn this into a prompt for Codex. Tighten `.claude/skills/coding-prompt-normalizer/SKILL.md` and `test/skills-contract.test.ts` so the skill is Codex-specific, preserves `~/.codex/config.toml`, and removes stale legacy repo wording. Keep the change small and keep `.agents` in sync.",
       "expected_output": "An implementation prompt that preserves the exact literals, points toward the mirrored skill copies and scaffold test, and keeps the change small without inventing a nonexistent src surface.",
       "files": [],
       "expectations": [
         "The output clearly frames the task as implementation work rather than review or high-level planning.",
-        "The output preserves `.claude/skills/coding-prompt-normalizer/SKILL.md`, `test/scaffold.test.ts`, and `~/.codex/config.toml` verbatim.",
+        "The output preserves `.claude/skills/coding-prompt-normalizer/SKILL.md`, `test/skills-contract.test.ts`, and `~/.codex/config.toml` verbatim.",
         "The output points toward the mirrored `.agents` copy without inventing unrelated files.",
         "The output does not include a generic summary of the whole repository."
       ]

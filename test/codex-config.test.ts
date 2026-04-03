@@ -6,8 +6,11 @@ import {
 } from "../src/constants/gateway.js";
 import { DEFAULT_MODEL } from "../src/constants/models.js";
 import {
+  areEquivalentTomlTexts,
   buildInstallConfigPlan,
+  createManagedTomlConfigWrite,
   getConfigTargetsForScope,
+  resolveConfigTargetPath,
   type ConfigPathsInput,
 } from "../src/install/codex-config.js";
 import type { TokenCommandConfig } from "../src/install/token-helper.js";
@@ -29,6 +32,23 @@ const testTokenCommand: TokenCommandConfig = {
 test("getConfigTargetsForScope keeps scope ownership centralized", () => {
   assert.deepEqual(getConfigTargetsForScope("user"), ["user"]);
   assert.deepEqual(getConfigTargetsForScope("local"), ["user", "project"]);
+});
+
+test("resolveConfigTargetPath keeps config layer path ownership centralized", () => {
+  assert.equal(
+    resolveConfigTargetPath("user", {
+      projectConfigPath: "/Users/test/project/.codex/config.toml",
+      userConfigPath: "/Users/test/.codex/config.toml",
+    }),
+    "/Users/test/.codex/config.toml",
+  );
+  assert.equal(
+    resolveConfigTargetPath("project", {
+      projectConfigPath: "/Users/test/project/.codex/config.toml",
+      userConfigPath: "/Users/test/.codex/config.toml",
+    }),
+    "/Users/test/project/.codex/config.toml",
+  );
 });
 
 test("buildInstallConfigPlan keeps user scope activation in user config", () => {
@@ -106,4 +126,23 @@ test("buildInstallConfigPlan splits local scope across user and project layers",
     testPaths.modelCatalogPath,
   );
   assert.equal(projectLayer.config.theme, "keep");
+});
+
+test("createManagedTomlConfigWrite keeps TOML render and no-op comparison together", () => {
+  const managedWrite = createManagedTomlConfigWrite({
+    model: DEFAULT_MODEL.modelId,
+  });
+
+  assert.equal(managedWrite.content, `model = "${DEFAULT_MODEL.modelId}"\n`);
+  assert.equal(
+    managedWrite.contentComparator(
+      'model = "gpt-5.4"\r\n',
+      'model = "gpt-5.4"\n',
+    ),
+    true,
+  );
+  assert.equal(
+    areEquivalentTomlTexts('model = "gpt-5.4"\n', 'model = "gpt-5.3"\n'),
+    false,
+  );
 });

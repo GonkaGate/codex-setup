@@ -225,7 +225,7 @@ Input:
 ```text
 Turn this into a clean prompt for Codex. Tighten
 `.claude/skills/coding-prompt-normalizer/SKILL.md` and
-`test/scaffold.test.ts` so the skill is Codex-specific, preserves
+`test/skills-contract.test.ts` so the skill is Codex-specific, preserves
 `~/.codex/config.toml`, and removes stale legacy repo wording. Keep the change
 small and keep `.agents` in sync.
 ```
@@ -246,14 +246,15 @@ Relevant repository context
 - Local agent-support assets are mirrored under `.claude/skills/` and
   `.agents/skills/`; changes to one copy should normally be reflected in the
   other.
-- `test/scaffold.test.ts` is the current place for repository-contract checks.
+- Repository-contract checks now live under `test/package-contract.test.ts`,
+  `test/docs-contract.test.ts`, and `test/skills-contract.test.ts`.
 
 Likely relevant code areas / files
 - `.claude/skills/coding-prompt-normalizer/SKILL.md`
 - `.claude/skills/coding-prompt-normalizer/references/`
 - `.claude/skills/coding-prompt-normalizer/evals/evals.json`
 - `.agents/skills/coding-prompt-normalizer/`
-- `test/scaffold.test.ts`
+- `test/skills-contract.test.ts`
 
 Requested change
 Inspect the current skill content, replace OpenClaw-specific repo assumptions
@@ -300,7 +301,7 @@ Likely relevant code areas / files
 - `docs/how-it-works.md`
 - `src/cli.ts`
 - `src/install/`
-- `test/scaffold.test.ts` if repository-contract coverage looks incomplete
+- `test/docs-contract.test.ts` if repository-contract coverage looks incomplete
 
 Review deliverable
 Review the current repository in read-only mode. Report findings first,

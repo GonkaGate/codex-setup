@@ -113,8 +113,9 @@ These are implementation facts today, not future plans:
   drift between the committed source snapshot and generated catalog module
 - `test/install-use-case.test.ts` covers real file-writing behavior on temp
   filesystems and git repos
-- `test/scaffold.test.ts` protects the repository contract around docs,
-  package metadata, and local mirrored skills
+- `test/package-contract.test.ts`, `test/docs-contract.test.ts`, and
+  `test/skills-contract.test.ts` protect the repository contract around
+  package metadata, docs, and local mirrored skills
 - local support assets are mirrored under `.claude/skills/` and
   `.agents/skills/`
 - when mirrored skill assets change, both copies should stay aligned unless
@@ -181,7 +182,9 @@ This repo currently does not do:
 │   ├── codex-config.test.ts
 │   ├── install-use-case.test.ts
 │   ├── models.test.ts
-│   ├── scaffold.test.ts
+│   ├── docs-contract.test.ts
+│   ├── package-contract.test.ts
+│   ├── skills-contract.test.ts
 │   ├── validate-api-key.test.ts
 │   └── write-managed-file.test.ts
 ├── .claude/skills/
@@ -245,7 +248,9 @@ When behavior changes:
 - update `README.md`
 - update relevant files in `docs/`
 - update `CHANGELOG.md` when the change is meaningful to users or contributors
-- update `test/scaffold.test.ts` if the repository contract changed
+- update the relevant contract tests under `test/package-contract.test.ts`,
+  `test/docs-contract.test.ts`, and `test/skills-contract.test.ts` if the
+  repository contract changed
 - keep mirrored `.claude` and `.agents` skills aligned when applicable
 
 When upstream Codex behavior changes:

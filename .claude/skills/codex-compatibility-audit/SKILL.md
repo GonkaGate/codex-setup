@@ -120,7 +120,9 @@ Start from the current repository contract surfaces:
 - `docs/troubleshooting.md`
 - `bin/gonkagate-codex.js`
 - `package.json`
-- `test/scaffold.test.ts`
+- `test/package-contract.test.ts`
+- `test/docs-contract.test.ts`
+- `test/skills-contract.test.ts`
 
 Inspect local skills when they encode product assumptions that affect the audit,
 especially:

@@ -4,8 +4,10 @@ import writeFileAtomic from "write-file-atomic";
 import {
   applyUnixMode,
   ensureDirectory,
+  OWNER_READ_WRITE_MODE,
   OWNER_READ_WRITE_EXECUTE_MODE,
 } from "./file-permissions.js";
+import { isMissingFileError } from "./error-codes.js";
 
 export interface ManagedWriteOptions {
   backupFactory?: (filePath: string, mode?: number) => Promise<string>;
@@ -30,7 +32,7 @@ export async function writeManagedTextFile(
   content: string,
   options: ManagedWriteOptions = {},
 ): Promise<ManagedWriteResult> {
-  const mode = options.mode ?? 0o600;
+  const mode = options.mode ?? OWNER_READ_WRITE_MODE;
   await ensureDirectory(path.dirname(filePath), OWNER_READ_WRITE_EXECUTE_MODE);
   const currentState = await readManagedTextFileState(filePath);
   const contentsMatch = options.contentComparator
@@ -127,8 +129,4 @@ async function readManagedTextFileState(
 
 async function assertSafeFileTarget(filePath: string): Promise<void> {
   await readManagedTextFileState(filePath);
-}
-
-function isMissingFileError(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }

@@ -69,7 +69,7 @@ Treat these as examples of tokens that must survive exactly if they appear:
 - `/debug-config`
 - `bin/gonkagate-codex.js`
 - `docs/how-it-works.md`
-- `test/scaffold.test.ts`
+- `test/docs-contract.test.ts`
 
 Wrap such literals in backticks inside the final prompt.
 

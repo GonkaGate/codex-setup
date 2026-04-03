@@ -14,11 +14,9 @@ import {
 } from "./install/install-use-case.js";
 import type { InstallScope } from "./install/settings-paths.js";
 
-interface CliOptions {
-  help: boolean;
+export interface CliOptions {
   modelKey?: (typeof SUPPORTED_MODEL_KEYS)[number];
   scope?: InstallScope;
-  version: boolean;
 }
 
 interface ParsedProgramOptions {
@@ -98,10 +96,8 @@ export function parseCliOptions(
 
   const options = program.opts<ParsedProgramOptions>();
   return {
-    help: false,
     modelKey: options.model,
     scope: options.scope,
-    version: false,
   };
 }
 

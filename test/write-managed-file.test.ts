@@ -1,17 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { areEquivalentTomlTexts } from "../src/install/codex-config.js";
 import { writeManagedTextFile } from "../src/install/write-managed-file.js";
-
-async function createTempWorkspace(prefix: string): Promise<string> {
-  return mkdtemp(path.join(tmpdir(), `${prefix}-`));
-}
-
-function normalizeText(text: string): string {
-  return text.replace(/\r\n/g, "\n").trim();
-}
+import { createTempWorkspace } from "./helpers/workspace.js";
 
 test("contentComparator suppresses rewrites and backups for equivalent text", async () => {
   const workspace = await createTempWorkspace("codex-setup-managed-write");
@@ -24,8 +17,7 @@ test("contentComparator suppresses rewrites and backups for equivalent text", as
       backupCalls += 1;
       return path.join(workspace, "config.toml.backup");
     },
-    contentComparator: (currentText, nextText) =>
-      normalizeText(currentText) === normalizeText(nextText),
+    contentComparator: areEquivalentTomlTexts,
   });
 
   assert.equal(result.changed, false);
@@ -46,8 +38,7 @@ test("contentComparator still allows real changes to create backups", async () =
       backupCalls += 1;
       return backupPath;
     },
-    contentComparator: (currentText, nextText) =>
-      normalizeText(currentText) === normalizeText(nextText),
+    contentComparator: areEquivalentTomlTexts,
   });
 
   assert.equal(result.changed, true);

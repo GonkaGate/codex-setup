@@ -14,7 +14,8 @@ points.
 - `codex-setup` is an implemented TypeScript/Node installer for using
   GonkaGate with Codex CLI.
 - Canonical surfaces today are `src/`, `bin/gonkagate-codex.js`, `README.md`,
-  `docs/`, `test/scaffold.test.ts`, `scripts/run-tests.mjs`,
+  `docs/`, `test/package-contract.test.ts`, `test/docs-contract.test.ts`,
+  `test/skills-contract.test.ts`, `scripts/run-tests.mjs`,
   `.github/workflows/`, `package.json`, `release-please-config.json`,
   `.claude/skills/`, and `.agents/skills/`.
 - `README.md` and the files under `docs/` are the main current contract
@@ -74,7 +75,7 @@ Useful context:
 - `docs/how-it-works.md`
 - `docs/security.md`
 - `docs/troubleshooting.md`
-- `test/scaffold.test.ts`
+- `test/docs-contract.test.ts`
 
 Relevant reminders:
 
@@ -103,14 +104,16 @@ Relevant reminders:
 - product-surface changes are not just copy edits; they may imply architecture
   or implementation work
 
-### Tests, Tooling, Scaffold Integrity
+### Tests, Tooling, Contract Integrity
 
 Use when the request mentions test coverage, repository contract checks, CI,
 formatting, or package quality.
 
 Useful context:
 
-- `test/scaffold.test.ts`
+- `test/package-contract.test.ts`
+- `test/docs-contract.test.ts`
+- `test/skills-contract.test.ts`
 - `scripts/run-tests.mjs`
 - `package.json`
 - `.github/workflows/ci.yml`
@@ -131,7 +134,7 @@ Useful context:
 - `.claude/skills/`
 - `.agents/skills/`
 - the specific local skill folder touched by the request
-- `test/scaffold.test.ts` when the repo should enforce the new expectation
+- `test/skills-contract.test.ts` when the repo should enforce the new expectation
 
 Relevant reminders:
 

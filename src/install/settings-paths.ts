@@ -1,12 +1,12 @@
 import path from "node:path";
 import { homedir } from "node:os";
-import { findGitContext } from "./local-git-ignore.js";
+import { findGitContext } from "./git-context.js";
 
 export type InstallScope = "user" | "local";
 
 export interface ResolveInstallPathsInput {
-  cwd: string;
   environment?: NodeJS.ProcessEnv;
+  projectRoot: string;
 }
 
 export interface InstallPaths {
@@ -29,7 +29,7 @@ export function resolveInstallPaths(
   input: ResolveInstallPathsInput,
 ): InstallPaths {
   const codexHome = resolveCodexHome(input.environment);
-  const projectRoot = path.resolve(input.cwd);
+  const projectRoot = path.resolve(input.projectRoot);
 
   return {
     codexHome,

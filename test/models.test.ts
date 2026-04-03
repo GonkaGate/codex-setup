@@ -22,6 +22,7 @@ test("createCuratedModelCatalog includes every supported model", () => {
     curatedCatalog.models.length,
     CONTRACT_METADATA.supportedModels.length,
   );
+  assert.deepEqual(SUPPORTED_MODELS, CONTRACT_METADATA.supportedModels);
 });
 
 test("generated model-catalog artifact matches the committed source snapshot", () => {

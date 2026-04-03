@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { VERIFIED_CODEX_MIN_VERSION } from "../constants/gateway.js";
+import { hasErrorCode } from "./error-codes.js";
 
 export interface CodexAvailability {
   command: string;
@@ -47,7 +48,7 @@ export function checkCodexAvailable(
   });
 
   if (result.error) {
-    if ("code" in result.error && result.error.code === "ENOENT") {
+    if (hasErrorCode(result.error, "ENOENT")) {
       throw new CodexCommandError(
         `Could not find the "codex" command in PATH. Install Codex CLI first, then rerun ${command}.`,
       );

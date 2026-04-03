@@ -1,82 +1,79 @@
 import { execFile } from "node:child_process";
-import { lstat, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { buildBackupGlob } from "./backup.js";
+import { hasErrorCode, isMissingFileError } from "./error-codes.js";
+import {
+  type GitContext,
+  findGitContext,
+  requireRepoRelativePath,
+} from "./git-context.js";
 
 const execFileAsync = promisify(execFile);
 
-export interface GitContext {
-  gitDir: string;
-  repoRoot: string;
+// Local-scope protection for <project>/.codex/config.toml:
+// inspect whether the config path is safe and tracked, then keep safe local
+// files out of git when the installer proceeds with local scope.
+export interface OutsideRepositoryLocalProjectConfigInspection {
+  kind: "outside_repo";
 }
 
-interface LocalProjectConfigGitContext {
-  gitContext: GitContext | null;
-  relativeTargetPath?: string;
+export interface TrackedLocalProjectConfigInspection {
+  gitContext: GitContext;
+  kind: "tracked";
+  relativeConfigPath: string;
 }
 
-export class TrackedLocalProjectConfigError extends Error {
-  readonly relativeTargetPath: string;
-  readonly repoRoot: string;
-
-  constructor(relativeTargetPath: string, repoRoot: string) {
-    super(
-      `Refusing local install because ${relativeTargetPath} is already tracked by git.`,
-    );
-    this.name = "TrackedLocalProjectConfigError";
-    this.relativeTargetPath = relativeTargetPath;
-    this.repoRoot = repoRoot;
-  }
+export interface UntrackedLocalProjectConfigInspection {
+  gitContext: GitContext;
+  kind: "untracked";
+  relativeConfigPath: string;
 }
 
-export async function ensureLocalProjectConfigIgnored(
+export type LocalProjectConfigInspection =
+  | OutsideRepositoryLocalProjectConfigInspection
+  | TrackedLocalProjectConfigInspection
+  | UntrackedLocalProjectConfigInspection;
+
+export async function inspectLocalProjectConfig(
   targetPath: string,
+): Promise<LocalProjectConfigInspection> {
+  const localConfigContext = await resolveLocalProjectConfigContext(targetPath);
+  const { gitContext, relativeConfigPath } = localConfigContext;
+
+  if (!gitContext || !relativeConfigPath) {
+    return {
+      kind: "outside_repo",
+    };
+  }
+
+  const kind = (await isTrackedPath(relativeConfigPath, gitContext.repoRoot))
+    ? "tracked"
+    : "untracked";
+
+  return {
+    gitContext,
+    kind,
+    relativeConfigPath,
+  };
+}
+
+export async function ensureLocalProjectConfigExcluded(
+  configInspection: UntrackedLocalProjectConfigInspection,
 ): Promise<void> {
-  const localConfigContext = await getLocalProjectConfigGitContext(targetPath);
-
-  if (
-    !localConfigContext.gitContext ||
-    !localConfigContext.relativeTargetPath
-  ) {
-    return;
-  }
-
-  const { gitContext, relativeTargetPath } = localConfigContext;
-  await assertTargetIsNotTracked(relativeTargetPath, gitContext.repoRoot);
-  await ensureTargetIgnored(gitContext.gitDir, relativeTargetPath);
+  await ensureConfigPathIgnored(
+    configInspection.gitContext.gitDir,
+    configInspection.relativeConfigPath,
+  );
 }
 
-export async function findGitContext(
-  startDirectory: string,
-): Promise<GitContext | null> {
-  let currentDirectory = path.resolve(startDirectory);
-
-  for (;;) {
-    const gitMarkerPath = path.join(currentDirectory, ".git");
-    const gitDir = await resolveGitDir(gitMarkerPath, currentDirectory);
-
-    if (gitDir) {
-      return {
-        gitDir,
-        repoRoot: currentDirectory,
-      };
-    }
-
-    const parentDirectory = path.dirname(currentDirectory);
-
-    if (parentDirectory === currentDirectory) {
-      return null;
-    }
-
-    currentDirectory = parentDirectory;
-  }
-}
-
-async function getLocalProjectConfigGitContext(
-  targetPath: string,
-): Promise<LocalProjectConfigGitContext> {
+async function resolveLocalProjectConfigContext(targetPath: string): Promise<{
+  gitContext: GitContext | null;
+  relativeConfigPath?: string;
+}> {
   const gitContext = await findGitContext(path.dirname(targetPath));
-  await assertSafeLocalProjectConfigTarget(targetPath, gitContext?.repoRoot);
+  await assertSafeLocalProjectConfigPath(targetPath, gitContext?.repoRoot);
 
   if (!gitContext) {
     return {
@@ -86,21 +83,21 @@ async function getLocalProjectConfigGitContext(
 
   return {
     gitContext,
-    relativeTargetPath: requireRepoRelativePath(
+    relativeConfigPath: requireRepoRelativePath(
       targetPath,
       gitContext.repoRoot,
     ),
   };
 }
 
-async function ensureTargetIgnored(
+async function ensureConfigPathIgnored(
   gitDir: string,
-  relativeTargetPath: string,
+  relativeConfigPath: string,
 ): Promise<void> {
-  const normalizedRelativePath = relativeTargetPath.split(path.sep).join("/");
+  const normalizedRelativePath = relativeConfigPath.split(path.sep).join("/");
   const ignoreEntries = [
     `/${normalizedRelativePath}`,
-    `/${normalizedRelativePath}.backup-*`,
+    buildBackupGlob(`/${normalizedRelativePath}`),
   ];
   const excludePath = path.join(gitDir, "info", "exclude");
   const existingContent = await readOptionalFile(excludePath);
@@ -129,7 +126,7 @@ async function ensureTargetIgnored(
   await writeFile(excludePath, nextContent, "utf8");
 }
 
-async function assertSafeLocalProjectConfigTarget(
+async function assertSafeLocalProjectConfigPath(
   targetPath: string,
   repoRoot?: string,
 ): Promise<void> {
@@ -164,9 +161,11 @@ async function assertPathIsNotSymlink(
   }
 }
 
+// Walk every path component between the repo root and the config file so local
+// scope cannot write through a symlinked intermediate directory.
 function getPathsFromRepoRoot(repoRoot: string, targetPath: string): string[] {
-  const relativeTargetPath = requireRepoRelativePath(targetPath, repoRoot);
-  const targetSegments = relativeTargetPath
+  const relativeConfigPath = requireRepoRelativePath(targetPath, repoRoot);
+  const targetSegments = relativeConfigPath
     .split(path.sep)
     .filter((segment) => segment.length > 0);
   const paths = [repoRoot];
@@ -178,22 +177,6 @@ function getPathsFromRepoRoot(repoRoot: string, targetPath: string): string[] {
   }
 
   return paths;
-}
-
-function requireRepoRelativePath(targetPath: string, repoRoot: string): string {
-  const relativeTargetPath = path.relative(repoRoot, targetPath);
-
-  if (
-    relativeTargetPath.length === 0 ||
-    relativeTargetPath.startsWith("..") ||
-    path.isAbsolute(relativeTargetPath)
-  ) {
-    throw new Error(
-      "Expected local Codex config to stay inside the current git repository.",
-    );
-  }
-
-  return relativeTargetPath;
 }
 
 function getSymlinkErrorMessage(
@@ -215,60 +198,28 @@ function getSymlinkErrorMessage(
   return `Refusing local Codex setup through a symlinked path component: ${label}.`;
 }
 
-async function assertTargetIsNotTracked(
-  relativeTargetPath: string,
+async function isTrackedPath(
+  relativeConfigPath: string,
   repoRoot: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
     await execFileAsync(
       "git",
-      ["-C", repoRoot, "ls-files", "--error-unmatch", "--", relativeTargetPath],
+      ["-C", repoRoot, "ls-files", "--error-unmatch", "--", relativeConfigPath],
       {
         encoding: "utf8",
       },
     );
-    throw new TrackedLocalProjectConfigError(relativeTargetPath, repoRoot);
+    return true;
   } catch (error) {
-    if (isMissingGitBinaryError(error)) {
+    if (hasErrorCode(error, "ENOENT")) {
       throw new Error(
         "Git is required to verify that .codex/config.toml is not already tracked before local install can continue.",
       );
     }
 
     if (isGitPathUnmatchedError(error)) {
-      return;
-    }
-
-    throw error;
-  }
-}
-
-async function resolveGitDir(
-  gitMarkerPath: string,
-  repoRoot: string,
-): Promise<string | null> {
-  try {
-    const gitMarkerStats = await stat(gitMarkerPath);
-
-    if (gitMarkerStats.isDirectory()) {
-      return gitMarkerPath;
-    }
-
-    if (gitMarkerStats.isFile()) {
-      const markerContent = await readFile(gitMarkerPath, "utf8");
-      const match = /^gitdir:\s*(.+)\s*$/m.exec(markerContent);
-
-      if (!match) {
-        throw new Error(`Could not resolve gitdir from ${gitMarkerPath}.`);
-      }
-
-      return path.resolve(repoRoot, match[1]);
-    }
-
-    return null;
-  } catch (error) {
-    if (isMissingFileError(error)) {
-      return null;
+      return false;
     }
 
     throw error;
@@ -288,14 +239,6 @@ async function readOptionalFile(filePath: string): Promise<string> {
   }
 }
 
-function isMissingFileError(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
-}
-
-function isMissingGitBinaryError(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
-}
-
 function isGitPathUnmatchedError(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === 1;
+  return hasErrorCode(error, 1);
 }

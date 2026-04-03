@@ -13,9 +13,10 @@ import {
 } from "./codex-command.js";
 import {
   buildInstallConfigPlan,
+  createManagedTomlConfigWrite,
   getConfigTargetsForScope,
   loadTomlConfig,
-  renderTomlConfig,
+  resolveConfigTargetPath,
   type ConfigLayerTarget,
   type TomlTable,
 } from "./codex-config.js";
@@ -23,9 +24,12 @@ import {
   InstallCommitError,
   type InstallRollbackFailure,
 } from "./install-errors.js";
+import { OWNER_READ_WRITE_MODE } from "./file-permissions.js";
 import {
-  ensureLocalProjectConfigIgnored,
-  TrackedLocalProjectConfigError,
+  ensureLocalProjectConfigExcluded,
+  inspectLocalProjectConfig,
+  type LocalProjectConfigInspection,
+  type UntrackedLocalProjectConfigInspection,
 } from "./local-git-ignore.js";
 import {
   promptForApiKey,
@@ -54,7 +58,7 @@ export interface InstallRequest {
   scope?: InstallScope;
 }
 
-export interface InstallOutcome {
+interface InstallDetails {
   codex: CodexAvailability;
   finalScope: InstallScope;
   helperPath: string;
@@ -67,14 +71,18 @@ export interface InstallOutcome {
   tokenPath: string;
   trustTargetPath?: string;
   userConfigPath: string;
+}
+
+export interface InstallOutcome extends InstallDetails {
   writes: ManagedWriteResult[];
 }
 
 export interface InstallUseCaseDependencies {
   checkCodexAvailable: typeof checkCodexAvailable;
   createBackup: typeof createBackup;
-  ensureLocalProjectConfigIgnored: typeof ensureLocalProjectConfigIgnored;
+  ensureLocalProjectConfigExcluded: typeof ensureLocalProjectConfigExcluded;
   environment: NodeJS.ProcessEnv;
+  inspectLocalProjectConfig: typeof inspectLocalProjectConfig;
   loadTomlConfig: typeof loadTomlConfig;
   nodeExecutable: string;
   platform: NodeJS.Platform;
@@ -87,34 +95,42 @@ export interface InstallUseCaseDependencies {
   writeManagedTextFile: typeof writeManagedTextFile;
 }
 
-interface PreparedManagedWrite {
+interface PlannedManagedWrite {
   content: string;
   contentComparator?: ManagedTextComparator;
   filePath: string;
   mode: number;
 }
 
-interface PreparedInstallPlan {
+interface ResolvedInstallContext {
+  apiKey: string;
   codex: CodexAvailability;
   finalScope: InstallScope;
-  helperPath: string;
-  modelCatalogPath: string;
-  projectConfigPath?: string;
-  projectRoot: string;
+  installPaths: InstallPaths;
+  localProjectConfigInspection?: UntrackedLocalProjectConfigInspection;
   requestedScope: InstallScope;
   selectedModel: SupportedModel;
   switchedToUserScope: boolean;
-  tokenPath: string;
-  trustTargetPath?: string;
-  userConfigPath: string;
-  writes: PreparedManagedWrite[];
+}
+
+interface PreparedInstallPlan {
+  details: InstallDetails;
+  localProjectConfigInspection?: UntrackedLocalProjectConfigInspection;
+  writes: PlannedManagedWrite[];
+}
+
+interface ScopeResolution {
+  finalScope: InstallScope;
+  localProjectConfigInspection?: UntrackedLocalProjectConfigInspection;
+  switchedToUserScope: boolean;
 }
 
 export const defaultInstallUseCaseDependencies = {
   checkCodexAvailable,
   createBackup,
-  ensureLocalProjectConfigIgnored,
+  ensureLocalProjectConfigExcluded,
   environment: process.env,
+  inspectLocalProjectConfig,
   loadTomlConfig,
   nodeExecutable: process.execPath,
   platform: process.platform,
@@ -135,18 +151,7 @@ export async function runInstallUseCase(
   const writes = await commitInstallPlan(installPlan, dependencies);
 
   return {
-    codex: installPlan.codex,
-    finalScope: installPlan.finalScope,
-    helperPath: installPlan.helperPath,
-    modelCatalogPath: installPlan.modelCatalogPath,
-    projectConfigPath: installPlan.projectConfigPath,
-    projectRoot: installPlan.projectRoot,
-    requestedScope: installPlan.requestedScope,
-    selectedModel: installPlan.selectedModel,
-    switchedToUserScope: installPlan.switchedToUserScope,
-    tokenPath: installPlan.tokenPath,
-    trustTargetPath: installPlan.trustTargetPath,
-    userConfigPath: installPlan.userConfigPath,
+    ...installPlan.details,
     writes,
   };
 }
@@ -155,6 +160,66 @@ async function prepareInstallPlan(
   request: InstallRequest,
   dependencies: InstallUseCaseDependencies,
 ): Promise<PreparedInstallPlan> {
+  const installContext = await resolveInstallInputs(request, dependencies);
+  const tokenCommand = createTokenCommandConfig({
+    codexHome: installContext.installPaths.codexHome,
+    nodeExecutable: dependencies.nodeExecutable,
+    platform: dependencies.platform,
+    tokenPath: installContext.installPaths.tokenPath,
+  });
+  const writes = await planManagedWrites(
+    installContext,
+    tokenCommand,
+    dependencies.loadTomlConfig,
+  );
+
+  return {
+    details: buildInstallDetails(installContext, tokenCommand),
+    localProjectConfigInspection: installContext.localProjectConfigInspection,
+    writes,
+  };
+}
+
+function buildInstallDetails(
+  installContext: ResolvedInstallContext,
+  tokenCommand: ReturnType<typeof createTokenCommandConfig>,
+): InstallDetails {
+  return {
+    codex: installContext.codex,
+    finalScope: installContext.finalScope,
+    helperPath: tokenCommand.helperFilePath,
+    modelCatalogPath: installContext.installPaths.modelCatalogPath,
+    projectConfigPath:
+      installContext.finalScope === "local"
+        ? installContext.installPaths.projectConfigPath
+        : undefined,
+    projectRoot: installContext.installPaths.projectRoot,
+    requestedScope: installContext.requestedScope,
+    selectedModel: installContext.selectedModel,
+    switchedToUserScope: installContext.switchedToUserScope,
+    tokenPath: installContext.installPaths.tokenPath,
+    trustTargetPath:
+      installContext.finalScope === "local"
+        ? installContext.installPaths.projectRoot
+        : undefined,
+    userConfigPath: installContext.installPaths.userConfigPath,
+  };
+}
+
+async function resolveInstallInputs(
+  request: InstallRequest,
+  dependencies: Pick<
+    InstallUseCaseDependencies,
+    | "checkCodexAvailable"
+    | "environment"
+    | "inspectLocalProjectConfig"
+    | "promptForApiKey"
+    | "promptForModel"
+    | "promptForScope"
+    | "promptForTrackedLocalConfigAction"
+    | "validateApiKey"
+  >,
+): Promise<ResolvedInstallContext> {
   const codex = dependencies.checkCodexAvailable();
   const apiKey = dependencies.validateApiKey(
     await dependencies.promptForApiKey(),
@@ -166,27 +231,45 @@ async function prepareInstallPlan(
     request.scope ?? (await dependencies.promptForScope("user"));
   const projectRoot = await resolveProjectRoot(request.cwd);
   const installPaths = resolveInstallPaths({
-    cwd: projectRoot,
     environment: dependencies.environment,
+    projectRoot,
   });
 
-  const scopeResolution = await resolveFinalScope(
+  const localProjectConfigInspection =
+    requestedScope === "local"
+      ? await dependencies.inspectLocalProjectConfig(
+          installPaths.projectConfigPath,
+        )
+      : undefined;
+  const scopeResolution = await chooseFinalScope(
     requestedScope,
-    installPaths,
-    dependencies,
+    localProjectConfigInspection,
+    dependencies.promptForTrackedLocalConfigAction,
   );
-  const tokenCommand = createTokenCommandConfig({
-    codexHome: installPaths.codexHome,
-    nodeExecutable: dependencies.nodeExecutable,
-    platform: dependencies.platform,
-    tokenPath: installPaths.tokenPath,
-  });
+
+  return {
+    apiKey,
+    codex,
+    finalScope: scopeResolution.finalScope,
+    installPaths,
+    localProjectConfigInspection: scopeResolution.localProjectConfigInspection,
+    requestedScope,
+    selectedModel,
+    switchedToUserScope: scopeResolution.switchedToUserScope,
+  };
+}
+
+async function planManagedWrites(
+  installContext: ResolvedInstallContext,
+  tokenCommand: ReturnType<typeof createTokenCommandConfig>,
+  loadTomlConfig: InstallUseCaseDependencies["loadTomlConfig"],
+): Promise<PlannedManagedWrite[]> {
   const curatedCatalog = createCuratedModelCatalog();
-  const writes: PreparedManagedWrite[] = [
+  const writes: PlannedManagedWrite[] = [
     {
-      content: `${apiKey}\n`,
-      filePath: installPaths.tokenPath,
-      mode: 0o600,
+      content: `${installContext.apiKey}\n`,
+      filePath: installContext.installPaths.tokenPath,
+      mode: OWNER_READ_WRITE_MODE,
     },
     {
       content: tokenCommand.content,
@@ -195,67 +278,57 @@ async function prepareInstallPlan(
     },
     {
       content: `${JSON.stringify(curatedCatalog, null, 2)}\n`,
-      filePath: installPaths.modelCatalogPath,
-      mode: 0o600,
+      filePath: installContext.installPaths.modelCatalogPath,
+      mode: OWNER_READ_WRITE_MODE,
     },
   ];
 
-  const configTargets = getConfigTargetsForScope(scopeResolution.finalScope);
+  const configTargets = getConfigTargetsForScope(installContext.finalScope);
   const currentConfigs = await loadCurrentConfigs(
     configTargets,
-    installPaths,
-    dependencies.loadTomlConfig,
+    installContext.installPaths,
+    loadTomlConfig,
   );
   const configPlan = buildInstallConfigPlan({
     currentConfigs,
-    finalScope: scopeResolution.finalScope,
-    paths: installPaths,
-    selectedModel,
+    finalScope: installContext.finalScope,
+    paths: installContext.installPaths,
+    selectedModel: installContext.selectedModel,
     tokenCommand,
   });
 
   writes.push(
     ...configPlan.map((entry) =>
       prepareTomlConfigWrite(
-        resolveConfigTargetPath(entry.target, installPaths),
+        resolveConfigTargetPath(entry.target, installContext.installPaths),
         entry.config,
       ),
     ),
   );
 
-  return {
-    codex,
-    finalScope: scopeResolution.finalScope,
-    helperPath: tokenCommand.helperFilePath,
-    modelCatalogPath: installPaths.modelCatalogPath,
-    projectConfigPath:
-      scopeResolution.finalScope === "local"
-        ? installPaths.projectConfigPath
-        : undefined,
-    projectRoot: installPaths.projectRoot,
-    requestedScope,
-    selectedModel,
-    switchedToUserScope: scopeResolution.switchedToUserScope,
-    tokenPath: installPaths.tokenPath,
-    trustTargetPath:
-      scopeResolution.finalScope === "local"
-        ? installPaths.projectRoot
-        : undefined,
-    userConfigPath: installPaths.userConfigPath,
-    writes,
-  };
+  return writes;
 }
 
 async function commitInstallPlan(
   installPlan: PreparedInstallPlan,
   dependencies: Pick<
     InstallUseCaseDependencies,
-    "createBackup" | "rollbackManagedTextFile" | "writeManagedTextFile"
+    | "createBackup"
+    | "ensureLocalProjectConfigExcluded"
+    | "rollbackManagedTextFile"
+    | "writeManagedTextFile"
   >,
 ): Promise<ManagedWriteResult[]> {
   const writes: ManagedWriteResult[] = [];
 
   try {
+    if (installPlan.localProjectConfigInspection) {
+      // Keep the repo-local config ignored only once the install is ready to commit.
+      await dependencies.ensureLocalProjectConfigExcluded(
+        installPlan.localProjectConfigInspection,
+      );
+    }
+
     for (const plannedWrite of installPlan.writes) {
       writes.push(
         await dependencies.writeManagedTextFile(
@@ -300,14 +373,11 @@ async function rollbackCompletedWrites(
   return rollbackFailures;
 }
 
-async function resolveFinalScope(
+async function chooseFinalScope(
   requestedScope: InstallScope,
-  installPaths: InstallPaths,
-  dependencies: Pick<
-    InstallUseCaseDependencies,
-    "ensureLocalProjectConfigIgnored" | "promptForTrackedLocalConfigAction"
-  >,
-): Promise<{ finalScope: InstallScope; switchedToUserScope: boolean }> {
+  localProjectConfigInspection: LocalProjectConfigInspection | undefined,
+  promptForTrackedLocalConfigAction: InstallUseCaseDependencies["promptForTrackedLocalConfigAction"],
+): Promise<ScopeResolution> {
   if (requestedScope !== "local") {
     return {
       finalScope: requestedScope,
@@ -315,43 +385,49 @@ async function resolveFinalScope(
     };
   }
 
-  try {
-    await dependencies.ensureLocalProjectConfigIgnored(
-      installPaths.projectConfigPath,
-    );
+  if (
+    !localProjectConfigInspection ||
+    localProjectConfigInspection.kind === "outside_repo"
+  ) {
     return {
       finalScope: "local",
       switchedToUserScope: false,
     };
-  } catch (error) {
-    if (!(error instanceof TrackedLocalProjectConfigError)) {
-      throw error;
-    }
-
-    const action = await dependencies.promptForTrackedLocalConfigAction(
-      error.relativeTargetPath,
-    );
-
-    if (action === "user") {
-      return {
-        finalScope: "user",
-        switchedToUserScope: true,
-      };
-    }
-
-    throw new Error("Installation cancelled.");
   }
+
+  if (localProjectConfigInspection.kind === "untracked") {
+    return {
+      finalScope: "local",
+      localProjectConfigInspection,
+      switchedToUserScope: false,
+    };
+  }
+
+  const action = await promptForTrackedLocalConfigAction(
+    localProjectConfigInspection.relativeConfigPath,
+  );
+
+  if (action === "user") {
+    return {
+      finalScope: "user",
+      switchedToUserScope: true,
+    };
+  }
+
+  throw new Error("Installation cancelled.");
 }
 
 function prepareTomlConfigWrite(
   filePath: string,
   nextConfig: TomlTable,
-): PreparedManagedWrite {
+): PlannedManagedWrite {
+  const managedTomlWrite = createManagedTomlConfigWrite(nextConfig);
+
   return {
-    content: renderTomlConfig(nextConfig),
-    contentComparator: areNormalizedTextsEqual,
+    content: managedTomlWrite.content,
+    contentComparator: managedTomlWrite.contentComparator,
     filePath,
-    mode: 0o600,
+    mode: OWNER_READ_WRITE_MODE,
   };
 }
 
@@ -369,24 +445,4 @@ async function loadCurrentConfigs(
   }
 
   return currentConfigs;
-}
-
-function resolveConfigTargetPath(
-  configTarget: ConfigLayerTarget,
-  installPaths: InstallPaths,
-): string {
-  return configTarget === "project"
-    ? installPaths.projectConfigPath
-    : installPaths.userConfigPath;
-}
-
-function areNormalizedTextsEqual(
-  currentText: string,
-  nextText: string,
-): boolean {
-  return normalizeText(currentText) === normalizeText(nextText);
-}
-
-function normalizeText(text: string): string {
-  return text.replace(/\r\n/g, "\n").trim();
 }

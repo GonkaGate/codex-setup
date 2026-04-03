@@ -8,20 +8,12 @@ import {
   TOKEN_REFRESH_INTERVAL_MS,
 } from "../constants/gateway.js";
 import type { SupportedModel } from "../constants/models.js";
+import { isMissingFileError } from "./error-codes.js";
 import type { InstallScope } from "./settings-paths.js";
 import type { TokenCommandConfig } from "./token-helper.js";
 
-export type TomlValue =
-  | boolean
-  | number
-  | string
-  | Date
-  | TomlTable
-  | TomlValue[];
-
-export interface TomlTable {
-  [key: string]: TomlValue;
-}
+export type TomlTable = Parameters<typeof TOML.stringify>[0];
+export type TomlValue = TomlTable[string];
 
 export interface LoadedTomlConfig {
   exists: boolean;
@@ -38,9 +30,19 @@ export interface ConfigPathsInput {
 
 export type ConfigLayerTarget = "user" | "project";
 
+export interface ConfigLayerPaths {
+  projectConfigPath: string;
+  userConfigPath: string;
+}
+
 export interface ConfigLayerPlanEntry {
   config: TomlTable;
   target: ConfigLayerTarget;
+}
+
+export interface ManagedTomlConfigWrite {
+  content: string;
+  contentComparator: (currentText: string, nextText: string) => boolean;
 }
 
 export interface BuildInstallConfigPlanInput {
@@ -59,7 +61,7 @@ export async function loadTomlConfig(
 ): Promise<LoadedTomlConfig> {
   try {
     const text = await readFile(filePath, "utf8");
-    const settings = TOML.parse(text) as TomlTable;
+    const settings: TomlTable = TOML.parse(text);
 
     return {
       exists: true,
@@ -88,6 +90,13 @@ export function getConfigTargetsForScope(
   return finalScope === "local"
     ? LOCAL_SCOPE_CONFIG_TARGETS
     : USER_SCOPE_CONFIG_TARGETS;
+}
+
+export function resolveConfigTargetPath(
+  target: ConfigLayerTarget,
+  paths: ConfigLayerPaths,
+): string {
+  return target === "project" ? paths.projectConfigPath : paths.userConfigPath;
 }
 
 export function buildInstallConfigPlan(
@@ -168,10 +177,17 @@ export function applyLocalProjectConfig(
 }
 
 export function renderTomlConfig(config: TomlTable): string {
-  const rendered = TOML.stringify(
-    config as Parameters<typeof TOML.stringify>[0],
-  );
+  const rendered = TOML.stringify(config);
   return rendered.endsWith("\n") ? rendered : `${rendered}\n`;
+}
+
+export function createManagedTomlConfigWrite(
+  config: TomlTable,
+): ManagedTomlConfigWrite {
+  return {
+    content: renderTomlConfig(config),
+    contentComparator: areEquivalentTomlTexts,
+  };
 }
 
 export function mergeTomlTables(
@@ -260,20 +276,30 @@ function createProviderConfig(
   };
 }
 
-function cloneTomlValue(value: TomlValue): TomlValue {
+function cloneTomlValue<Value extends TomlValue>(value: Value): Value {
   if (Array.isArray(value)) {
-    return value.map((item) => cloneTomlValue(item));
+    return value.map((item) => cloneTomlValue(item)) as Value;
   }
 
   if (isPlainTomlTable(value)) {
-    return mergeTomlTables({}, value);
+    return mergeTomlTables({}, value) as Value;
   }
 
   return value;
 }
 
 function isPlainTomlTable(value: unknown): value is TomlTable {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    value instanceof Date
+  ) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function getCurrentConfig(
@@ -283,6 +309,13 @@ function getCurrentConfig(
   return currentConfigs[target] ?? {};
 }
 
-function isMissingFileError(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
+export function areEquivalentTomlTexts(
+  currentText: string,
+  nextText: string,
+): boolean {
+  return normalizeTomlText(currentText) === normalizeTomlText(nextText);
+}
+
+function normalizeTomlText(text: string): string {
+  return text.replace(/\r\n/g, "\n").trim();
 }

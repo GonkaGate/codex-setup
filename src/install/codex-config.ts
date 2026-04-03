@@ -79,38 +79,48 @@ const CONFIG_PATCH_BUILDERS: Record<ConfigLayerRole, ConfigPatchBuilder> = {
 export async function planInstallConfigWrites(
   input: PlanInstallConfigWritesInput,
 ): Promise<ConfigFilePlanEntry[]> {
-  const context = createConfigPlanBuildContext(input);
-  const plannedEntries: ConfigFilePlanEntry[] = [];
+  const currentConfigs = await loadCurrentConfigsForLayers(
+    input.configLayers,
+    input.paths,
+    input.loadTomlConfig,
+  );
 
-  for (const configLayer of input.configLayers) {
-    const filePath = resolveConfigLayerFilePath(
-      configLayer.target,
-      input.paths,
-    );
-    const currentConfig = (await input.loadTomlConfig(filePath)).settings;
-    const entry = buildConfigPlanEntry(configLayer, currentConfig, context);
-
-    plannedEntries.push({
-      ...entry,
-      filePath,
-    });
-  }
-
-  return plannedEntries;
+  return buildInstallConfigPlan({
+    configLayers: input.configLayers,
+    currentConfigs,
+    paths: input.paths,
+    selectedModel: input.selectedModel,
+    tokenCommand: input.tokenCommand,
+  }).map((entry) => ({
+    ...entry,
+    filePath: resolveConfigLayerFilePath(entry.target, input.paths),
+  }));
 }
 
 export function buildInstallConfigPlan(
   input: BuildInstallConfigPlanInput,
 ): ConfigLayerPlanEntry[] {
   const context = createConfigPlanBuildContext(input);
+  const targetsInOrder = getConfigLayerTargetsInOrder(input.configLayers);
+  const plannedConfigsByTarget: Partial<Record<ConfigLayerTarget, TomlTable>> =
+    {};
 
-  return input.configLayers.map((configLayer) =>
-    buildConfigPlanEntry(
-      configLayer,
-      input.currentConfigs[configLayer.target] ?? {},
-      context,
-    ),
-  );
+  for (const target of targetsInOrder) {
+    plannedConfigsByTarget[target] = input.currentConfigs[target] ?? {};
+  }
+
+  for (const configLayer of input.configLayers) {
+    const currentConfig = plannedConfigsByTarget[configLayer.target] ?? {};
+    plannedConfigsByTarget[configLayer.target] = mergeTomlTables(
+      currentConfig,
+      buildConfigLayerPatch(configLayer, context),
+    );
+  }
+
+  return targetsInOrder.map((target) => ({
+    config: plannedConfigsByTarget[target] ?? {},
+    target,
+  }));
 }
 
 function createConfigPlanBuildContext(
@@ -126,18 +136,33 @@ function createConfigPlanBuildContext(
   };
 }
 
-function buildConfigPlanEntry(
-  configLayer: ScopeConfigLayer,
-  currentConfig: TomlTable,
-  context: ConfigPlanBuildContext,
-): ConfigLayerPlanEntry {
-  return {
-    config: mergeTomlTables(
-      currentConfig,
-      buildConfigLayerPatch(configLayer, context),
-    ),
-    target: configLayer.target,
-  };
+async function loadCurrentConfigsForLayers(
+  configLayers: readonly ScopeConfigLayer[],
+  paths: ConfigLayerPaths,
+  loadTomlConfig: (filePath: string) => Promise<LoadedTomlConfig>,
+): Promise<Partial<Record<ConfigLayerTarget, TomlTable>>> {
+  const currentConfigs: Partial<Record<ConfigLayerTarget, TomlTable>> = {};
+
+  for (const target of getConfigLayerTargetsInOrder(configLayers)) {
+    const filePath = resolveConfigLayerFilePath(target, paths);
+    currentConfigs[target] = (await loadTomlConfig(filePath)).settings;
+  }
+
+  return currentConfigs;
+}
+
+function getConfigLayerTargetsInOrder(
+  configLayers: readonly ScopeConfigLayer[],
+): ConfigLayerTarget[] {
+  const targetsInOrder: ConfigLayerTarget[] = [];
+
+  for (const configLayer of configLayers) {
+    if (!targetsInOrder.includes(configLayer.target)) {
+      targetsInOrder.push(configLayer.target);
+    }
+  }
+
+  return targetsInOrder;
 }
 
 function buildConfigLayerPatch(

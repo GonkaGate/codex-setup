@@ -71,12 +71,10 @@ function createWritePathMap(
 test("planInstallManagedWrites keeps user-scope config after secret and helper writes", async () => {
   const writes = await planInstallManagedWrites(createPlanInput("user"));
 
-  assert.deepEqual(writes.map((write) => write.kind).sort(), [
-    "model_catalog",
-    "token",
-    "token_helper",
-    "user_config",
-  ]);
+  assert.deepEqual(
+    writes.map((write) => write.kind),
+    ["token", "token_helper", "model_catalog", "user_config"],
+  );
   assert.deepEqual(createWritePathMap(writes), {
     model_catalog: testInstallPaths.modelCatalogPath,
     token: testInstallPaths.tokenPath,
@@ -92,13 +90,10 @@ test("planInstallManagedWrites keeps user-scope config after secret and helper w
 test("planInstallManagedWrites appends local project config after the user layer", async () => {
   const writes = await planInstallManagedWrites(createPlanInput("local"));
 
-  assert.deepEqual(writes.map((write) => write.kind).sort(), [
-    "model_catalog",
-    "project_config",
-    "token",
-    "token_helper",
-    "user_config",
-  ]);
+  assert.deepEqual(
+    writes.map((write) => write.kind),
+    ["token", "token_helper", "model_catalog", "user_config", "project_config"],
+  );
   assert.deepEqual(createWritePathMap(writes), {
     model_catalog: testInstallPaths.modelCatalogPath,
     project_config: testInstallPaths.projectConfigPath,
@@ -113,16 +108,15 @@ test("planInstallManagedWritePhases keeps commit phases explicit", async () => {
   const phasesByName = Object.fromEntries(
     phases.map((phase) => [
       phase.name,
-      phase.writes.map((write) => write.kind).sort(),
+      phase.writes.map((write) => write.kind),
     ]),
   );
 
-  assert.deepEqual(phases.map((phase) => phase.name).sort(), [
-    "catalog",
-    "config",
-    "credentials",
-  ]);
+  assert.deepEqual(
+    phases.map((phase) => phase.name),
+    ["credentials", "catalog", "config"],
+  );
   assert.deepEqual(phasesByName.credentials, ["token", "token_helper"]);
   assert.deepEqual(phasesByName.catalog, ["model_catalog"]);
-  assert.deepEqual(phasesByName.config, ["project_config", "user_config"]);
+  assert.deepEqual(phasesByName.config, ["user_config", "project_config"]);
 });

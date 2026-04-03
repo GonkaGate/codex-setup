@@ -9,7 +9,12 @@ import {
   planInstallManagedWritePhases,
   type PlannedManagedWritePhase,
 } from "./install-managed-writes.js";
-import { resolveInstallScope, type ScopeDetails } from "./install-scope.js";
+import {
+  resolveInstallScope,
+  type ScopeConfigLayer,
+  type ScopeDetails,
+  type ScopeResolution,
+} from "./install-scope.js";
 import {
   resolveInstallPaths,
   resolveProjectRoot,
@@ -40,6 +45,7 @@ export interface InstallSummary extends ScopeDetails {
 
 export interface PreparedInstallState {
   apiKey: string;
+  configLayers: readonly ScopeConfigLayer[];
   installPaths: InstallPaths;
   localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget;
   summary: InstallSummary;
@@ -63,7 +69,7 @@ export async function prepareInstallPlan(
   );
   const writePhases = await planInstallManagedWritePhases({
     apiKey: installState.apiKey,
-    configLayers: installState.summary.configLayers,
+    configLayers: installState.configLayers,
     installPaths: installState.installPaths,
     loadTomlConfig: planningDependencies.loadTomlConfig,
     selectedModel: installState.summary.selectedModel,
@@ -84,6 +90,37 @@ async function resolveInstallState(
     "nodeExecutable" | "platform"
   >,
 ): Promise<PreparedInstallState> {
+  const inputs = await resolveInstallInputs(request, inputDependencies);
+  const installContext = await resolveInstallContext(
+    request.cwd,
+    inputs.requestedScope,
+    inputDependencies,
+  );
+  const tokenCommand = createTokenCommandConfig({
+    codexHome: installContext.installPaths.codexHome,
+    nodeExecutable: planningDependencies.nodeExecutable,
+    platform: planningDependencies.platform,
+    tokenPath: installContext.installPaths.tokenPath,
+  });
+
+  return createPreparedInstallState({
+    ...inputs,
+    installContext,
+    tokenCommand,
+  });
+}
+
+interface ResolvedInstallInputs {
+  apiKey: string;
+  codex: CodexAvailability;
+  requestedScope: InstallScope;
+  selectedModel: SupportedModel;
+}
+
+async function resolveInstallInputs(
+  request: InstallRequest,
+  inputDependencies: InstallInputDependencies,
+): Promise<ResolvedInstallInputs> {
   const codex = inputDependencies.checkCodexAvailable();
   const apiKey = inputDependencies.validateApiKey(
     await inputDependencies.promptForApiKey(),
@@ -96,7 +133,31 @@ async function resolveInstallState(
       );
   const requestedScope =
     request.scope ?? (await inputDependencies.promptForScope("user"));
-  const projectRoot = await resolveProjectRoot(request.cwd);
+
+  return {
+    apiKey,
+    codex,
+    requestedScope,
+    selectedModel,
+  };
+}
+
+interface InstallContext {
+  installPaths: InstallPaths;
+  scopeResolution: ScopeResolution;
+}
+
+async function resolveInstallContext(
+  cwd: string,
+  requestedScope: InstallScope,
+  inputDependencies: Pick<
+    InstallInputDependencies,
+    | "environment"
+    | "inspectLocalProjectConfig"
+    | "promptForTrackedLocalConfigAction"
+  >,
+): Promise<InstallContext> {
+  const projectRoot = await resolveProjectRoot(cwd);
   const installPaths = resolveInstallPaths({
     environment: inputDependencies.environment,
     projectRoot,
@@ -108,27 +169,36 @@ async function resolveInstallState(
       inputDependencies.promptForTrackedLocalConfigAction,
     requestedScope,
   });
-  const tokenCommand = createTokenCommandConfig({
-    codexHome: installPaths.codexHome,
-    nodeExecutable: planningDependencies.nodeExecutable,
-    platform: planningDependencies.platform,
-    tokenPath: installPaths.tokenPath,
-  });
 
   return {
-    apiKey,
     installPaths,
+    scopeResolution,
+  };
+}
+
+function createPreparedInstallState(input: {
+  apiKey: string;
+  codex: CodexAvailability;
+  installContext: InstallContext;
+  requestedScope: InstallScope;
+  selectedModel: SupportedModel;
+  tokenCommand: TokenCommandConfig;
+}): PreparedInstallState {
+  return {
+    apiKey: input.apiKey,
+    configLayers: input.installContext.scopeResolution.configLayers,
+    installPaths: input.installContext.installPaths,
     localProjectConfigExcludeTarget:
-      scopeResolution.localProjectConfigExcludeTarget,
+      input.installContext.scopeResolution.localProjectConfigExcludeTarget,
     summary: buildInstallSummary({
-      codex,
-      installPaths,
-      requestedScope,
-      scopeDetails: scopeResolution.details,
-      selectedModel,
-      tokenCommand,
+      codex: input.codex,
+      installPaths: input.installContext.installPaths,
+      requestedScope: input.requestedScope,
+      scopeDetails: input.installContext.scopeResolution.details,
+      selectedModel: input.selectedModel,
+      tokenCommand: input.tokenCommand,
     }),
-    tokenCommand,
+    tokenCommand: input.tokenCommand,
   };
 }
 

@@ -14,7 +14,6 @@ export interface ScopeConfigLayer {
 }
 
 export interface ScopeDetails {
-  configLayers: readonly ScopeConfigLayer[];
   finalScope: InstallScope;
   projectConfigPath?: string;
   switchedToUserScope: boolean;
@@ -22,6 +21,7 @@ export interface ScopeDetails {
 }
 
 export interface ScopeResolution {
+  configLayers: readonly ScopeConfigLayer[];
   details: ScopeDetails;
   localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget;
 }
@@ -64,9 +64,7 @@ export async function resolveInstallScope(
   input: ResolveInstallScopeInput,
 ): Promise<ScopeResolution> {
   if (input.requestedScope !== "local") {
-    return {
-      details: createUserScopeDetails(false),
-    };
+    return createUserScopeResolution(false);
   }
 
   const localProjectConfigInspection = await input.inspectLocalProjectConfig(
@@ -75,24 +73,19 @@ export async function resolveInstallScope(
 
   switch (localProjectConfigInspection.kind) {
     case "outside_repo":
-      return {
-        details: createLocalScopeDetails(input.installPaths),
-      };
+      return createLocalScopeResolution(input.installPaths);
     case "untracked":
-      return {
-        details: createLocalScopeDetails(input.installPaths),
-        localProjectConfigExcludeTarget:
-          localProjectConfigInspection.excludeTarget,
-      };
+      return createLocalScopeResolution(
+        input.installPaths,
+        localProjectConfigInspection.excludeTarget,
+      );
     case "tracked": {
       const action = await input.promptForTrackedLocalConfigAction(
         localProjectConfigInspection.relativeConfigPath,
       );
 
       if (action === "user") {
-        return {
-          details: createUserScopeDetails(true),
-        };
+        return createUserScopeResolution(true);
       }
 
       throw new Error("Installation cancelled.");
@@ -106,31 +99,10 @@ export function getScopeConfigLayers(
   return CONFIG_LAYERS_BY_SCOPE[scope];
 }
 
-export function hasProjectConfigLayer(
-  configLayers: readonly ScopeConfigLayer[],
-): boolean {
-  return configLayers.some((layer) => layer.target === "project");
-}
-
-export function getActivationConfigTarget(
-  configLayers: readonly ScopeConfigLayer[],
-): ConfigLayerTarget {
-  const activationLayer = configLayers.find((layer) =>
-    layer.roles.includes("activation"),
-  );
-
-  if (!activationLayer) {
-    throw new Error("Expected at least one activation config layer.");
-  }
-
-  return activationLayer.target;
-}
-
 export function createUserScopeDetails(
   switchedToUserScope: boolean,
 ): ScopeDetails {
   return {
-    configLayers: getScopeConfigLayers("user"),
     finalScope: "user",
     switchedToUserScope,
   };
@@ -140,10 +112,31 @@ export function createLocalScopeDetails(
   installPaths: Pick<InstallPaths, "projectConfigPath" | "projectRoot">,
 ): ScopeDetails {
   return {
-    configLayers: getScopeConfigLayers("local"),
     finalScope: "local",
     projectConfigPath: installPaths.projectConfigPath,
     switchedToUserScope: false,
     trustTargetPath: installPaths.projectRoot,
+  };
+}
+
+function createUserScopeResolution(
+  switchedToUserScope: boolean,
+): ScopeResolution {
+  return {
+    configLayers: getScopeConfigLayers("user"),
+    details: createUserScopeDetails(switchedToUserScope),
+  };
+}
+
+function createLocalScopeResolution(
+  installPaths: Pick<InstallPaths, "projectConfigPath" | "projectRoot">,
+  localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget,
+): ScopeResolution {
+  return {
+    configLayers: getScopeConfigLayers("local"),
+    details: createLocalScopeDetails(installPaths),
+    ...(localProjectConfigExcludeTarget
+      ? { localProjectConfigExcludeTarget }
+      : {}),
   };
 }

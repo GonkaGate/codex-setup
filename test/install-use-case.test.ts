@@ -29,6 +29,7 @@ test("user scope writes GonkaGate provider, token helper, and curated catalog", 
   const outcome = await scenario.run();
 
   assert.equal(outcome.finalScope, "user");
+  assert.equal("configLayers" in outcome, false);
   assert.equal(outcome.projectConfigPath, undefined);
 
   const userConfig = parseToml(await readFile(outcome.userConfigPath, "utf8"));
@@ -330,12 +331,12 @@ test("commit failures roll back completed managed writes and preserve prior file
 
       assert.equal(error.completedWrites.length, 3);
       assert.deepEqual(
-        error.completedWrites.map((write) => write.filePath).sort(),
+        error.completedWrites.map((write) => write.filePath),
         [
           tokenPath,
           helperPath,
           path.join(scenario.codexHome, "model-catalogs", "gonkagate.json"),
-        ].sort(),
+        ],
       );
       assert.deepEqual(error.rollbackFailures, []);
       return true;

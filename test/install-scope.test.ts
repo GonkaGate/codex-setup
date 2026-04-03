@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createLocalScopeDetails,
   createUserScopeDetails,
+  getScopeConfigLayers,
   resolveInstallScope,
 } from "../src/install/install-scope.js";
 import type {
@@ -35,6 +36,7 @@ test("resolveInstallScope keeps user scope without local config inspection", asy
   });
 
   assert.deepEqual(resolution, {
+    configLayers: getScopeConfigLayers("user"),
     details: {
       ...createUserScopeDetails(false),
     },
@@ -59,6 +61,7 @@ test("resolveInstallScope keeps local scope when the project config is outside g
   });
 
   assert.deepEqual(resolution, {
+    configLayers: getScopeConfigLayers("local"),
     details: {
       ...createLocalScopeDetails(testInstallPaths),
     },
@@ -77,6 +80,7 @@ test("resolveInstallScope returns an exclude target for untracked local configs"
   });
 
   assert.deepEqual(resolution, {
+    configLayers: getScopeConfigLayers("local"),
     details: {
       ...createLocalScopeDetails(testInstallPaths),
     },
@@ -102,6 +106,7 @@ test("resolveInstallScope switches tracked local config to user scope when reque
   });
 
   assert.deepEqual(resolution, {
+    configLayers: getScopeConfigLayers("user"),
     details: {
       ...createUserScopeDetails(true),
     },

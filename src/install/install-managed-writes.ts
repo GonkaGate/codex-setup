@@ -7,7 +7,7 @@ import {
   planInstallConfigWrites,
 } from "./codex-config.js";
 import { OWNER_READ_WRITE_MODE } from "./file-permissions.js";
-import type { ScopeConfigLayer } from "./install-scope.js";
+import type { ConfigLayerTarget, ScopeConfigLayer } from "./install-scope.js";
 import type { InstallPaths } from "./settings-paths.js";
 import {
   createManagedTomlConfigWrite,
@@ -49,6 +49,17 @@ export interface PlanInstallManagedWritesInput {
 
 interface ManagedWritePlanningContext extends PlanInstallManagedWritesInput {}
 
+const INSTALL_MANAGED_WRITE_PHASE_ORDER = [
+  "credentials",
+  "catalog",
+  "config",
+] as const satisfies readonly PlannedManagedWritePhaseName[];
+
+const CONFIG_WRITE_KIND_BY_TARGET = {
+  project: "project_config",
+  user: "user_config",
+} as const satisfies Record<ConfigLayerTarget, PlannedManagedWriteKind>;
+
 export async function planInstallManagedWrites(
   input: PlanInstallManagedWritesInput,
 ): Promise<PlannedManagedWrite[]> {
@@ -59,11 +70,14 @@ export async function planInstallManagedWrites(
 export async function planInstallManagedWritePhases(
   input: PlanInstallManagedWritesInput,
 ): Promise<PlannedManagedWritePhase[]> {
-  return [
-    planCredentialManagedWritePhase(input),
-    planCatalogManagedWritePhase(input),
-    await planConfigManagedWritePhase(input),
-  ];
+  const phasesByName = {
+    credentials: planCredentialManagedWritePhase(input),
+    catalog: planCatalogManagedWritePhase(input),
+    // Commit and rollback semantics depend on this phase sequence staying explicit.
+    config: await planConfigManagedWritePhase(input),
+  } satisfies Record<PlannedManagedWritePhaseName, PlannedManagedWritePhase>;
+
+  return INSTALL_MANAGED_WRITE_PHASE_ORDER.map((name) => phasesByName[name]);
 }
 
 function planCredentialManagedWritePhase(
@@ -139,7 +153,7 @@ function prepareTomlConfigWrite(
   const managedTomlWrite = createManagedTomlConfigWrite(entry.config);
 
   return createManagedWritePlan(
-    entry.target === "user" ? "user_config" : "project_config",
+    CONFIG_WRITE_KIND_BY_TARGET[entry.target],
     entry.filePath,
     managedTomlWrite.content,
     OWNER_READ_WRITE_MODE,

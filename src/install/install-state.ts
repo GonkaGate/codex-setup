@@ -9,7 +9,12 @@ import {
   planInstallManagedWritePhases,
   type InstallWritePhase,
 } from "./install-managed-writes.js";
-import { resolveInstallScope, type ScopeDetails } from "./install-scope.js";
+import {
+  resolveInstallScope,
+  type LocalScopeDetails,
+  type ScopeResolution,
+  type UserScopeDetails,
+} from "./install-scope.js";
 import type { LocalProjectConfigExcludeTarget } from "./local-project-config.js";
 import {
   resolveInstallPaths,
@@ -27,7 +32,7 @@ import type {
 } from "./install-dependencies.js";
 import type { InstallRequest } from "./install-use-case.js";
 
-export interface InstallSummary extends ScopeDetails {
+interface InstallSummaryBase {
   codex: CodexAvailability;
   helperPath: string;
   modelCatalogPath: string;
@@ -38,15 +43,36 @@ export interface InstallSummary extends ScopeDetails {
   userConfigPath: string;
 }
 
-export interface PreparedInstallContext extends ScopeDetails {
+export interface UserInstallSummary
+  extends InstallSummaryBase, UserScopeDetails {}
+
+export interface LocalInstallSummary
+  extends InstallSummaryBase, LocalScopeDetails {}
+
+export type InstallSummary = UserInstallSummary | LocalInstallSummary;
+
+interface PreparedInstallContextBase {
   apiKey: string;
   codex: CodexAvailability;
   installPaths: InstallPaths;
-  localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget;
   requestedScope: InstallScope;
   selectedModel: SupportedModel;
   tokenCommand: TokenCommandConfig;
 }
+
+export interface PreparedUserInstallContext
+  extends PreparedInstallContextBase, UserScopeDetails {
+  localProjectConfigExcludeTarget?: never;
+}
+
+export interface PreparedLocalInstallContext
+  extends PreparedInstallContextBase, LocalScopeDetails {
+  localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget;
+}
+
+export type PreparedInstallContext =
+  | PreparedUserInstallContext
+  | PreparedLocalInstallContext;
 
 export interface PreparedInstallPlan {
   context: PreparedInstallContext;
@@ -127,7 +153,7 @@ async function resolveRequestedInstallScope(
   installPaths: InstallPaths,
   requestedScope: InstallScope,
   inputDependencies: InstallInputDependencies,
-) {
+): Promise<ScopeResolution> {
   return resolveInstallScope({
     inspectLocalProjectConfig: inputDependencies.inspectLocalProjectConfig,
     installPaths,
@@ -140,19 +166,30 @@ async function resolveRequestedInstallScope(
 function createPreparedInstallContext(
   resolvedInputs: ResolvedInstallInputs,
   installPaths: InstallPaths,
-  scopeResolution: Awaited<ReturnType<typeof resolveInstallScope>>,
+  scopeResolution: ScopeResolution,
   tokenCommand: TokenCommandConfig,
 ): PreparedInstallContext {
-  return {
-    ...scopeResolution.details,
+  const commonContext = {
     apiKey: resolvedInputs.apiKey,
     codex: resolvedInputs.codex,
     installPaths,
-    localProjectConfigExcludeTarget:
-      scopeResolution.localProjectConfigExcludeTarget,
     requestedScope: resolvedInputs.requestedScope,
     selectedModel: resolvedInputs.selectedModel,
     tokenCommand,
+  };
+
+  if (scopeResolution.details.finalScope === "user") {
+    return {
+      ...commonContext,
+      ...scopeResolution.details,
+    };
+  }
+
+  return {
+    ...commonContext,
+    ...scopeResolution.details,
+    localProjectConfigExcludeTarget:
+      scopeResolution.localProjectConfigExcludeTarget,
   };
 }
 
@@ -197,18 +234,30 @@ async function collectInstallInputs(
 export function createInstallSummary(
   context: PreparedInstallContext,
 ): InstallSummary {
-  return {
+  const commonSummary = {
     codex: context.codex,
-    finalScope: context.finalScope,
     helperPath: context.tokenCommand.helperFilePath,
     modelCatalogPath: context.installPaths.modelCatalogPath,
-    projectConfigPath: context.projectConfigPath,
     projectRoot: context.installPaths.projectRoot,
     requestedScope: context.requestedScope,
     selectedModel: context.selectedModel,
-    switchedToUserScope: context.switchedToUserScope,
     tokenPath: context.installPaths.tokenPath,
-    trustTargetPath: context.trustTargetPath,
     userConfigPath: context.installPaths.userConfigPath,
+  };
+
+  if (context.finalScope === "user") {
+    return {
+      ...commonSummary,
+      finalScope: "user",
+      switchedToUserScope: context.switchedToUserScope,
+    };
+  }
+
+  return {
+    ...commonSummary,
+    finalScope: "local",
+    projectConfigPath: context.projectConfigPath,
+    switchedToUserScope: false,
+    trustTargetPath: context.trustTargetPath,
   };
 }

@@ -28,9 +28,9 @@ export interface InstallRequest {
   scope?: InstallScope;
 }
 
-export interface InstallOutcome extends InstallSummary {
+export type InstallOutcome = InstallSummary & {
   writes: ManagedWriteResult[];
-}
+};
 
 export async function runInstallUseCase(
   request: InstallRequest,

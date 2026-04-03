@@ -29,6 +29,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "contract:check": "node scripts/check-contract-files.mjs",
+    "contract:generate": "node scripts/generate-contract-files.mjs",
     "dev": "tsx src/cli.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -38,7 +40,7 @@
     "prepack": "npm run ci",
     "test": "npm run build && node scripts/run-tests.mjs",
     "typecheck": "tsc -p tsconfig.json",
-    "ci": "npm run typecheck && npm run test && npm run model-catalog:check && npm run format:check && npm run package:check"
+    "ci": "npm run typecheck && npm run test && npm run contract:check && npm run model-catalog:check && npm run format:check && npm run package:check"
   },
   "engines": {
     "node": ">=22.14.0"

@@ -104,7 +104,7 @@ function buildNextStepsSection(): string {
 }
 
 function buildLocalScopeSection(outcome: InstallOutcome): string | undefined {
-  if (outcome.finalScope !== "local" || !outcome.projectConfigPath) {
+  if (outcome.finalScope !== "local") {
     return undefined;
   }
 

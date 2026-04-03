@@ -4,24 +4,31 @@
 
 import { VERIFIED_CODEX_MODEL_CATALOG_VERSION } from "./gateway.js";
 
-export interface ModelCatalogEntry {
-  slug: string;
-  display_name: string;
-  description?: string;
-  priority: number;
-  visibility: string;
-  supported_in_api: boolean;
-  [key: string]: unknown;
+type ModelCatalogPrimitive = boolean | number | string | null;
+
+type ModelCatalogValue =
+  | ModelCatalogPrimitive
+  | { readonly [key: string]: ModelCatalogValue }
+  | readonly ModelCatalogValue[];
+
+interface ModelCatalogEntryShape {
+  readonly slug: string;
+  readonly display_name: string;
+  readonly description?: string;
+  readonly priority: number;
+  readonly visibility: string;
+  readonly supported_in_api: boolean;
+  readonly [key: string]: ModelCatalogValue | undefined;
 }
 
-export interface ModelCatalog {
-  models: ModelCatalogEntry[];
+interface ModelCatalogShape {
+  readonly models: readonly ModelCatalogEntryShape[];
 }
 
 export const GONKAGATE_MODEL_CATALOG_VERSION =
   VERIFIED_CODEX_MODEL_CATALOG_VERSION;
 
-export const GONKAGATE_MODEL_CATALOG: ModelCatalog = {
+export const GONKAGATE_MODEL_CATALOG = {
   "models": [
     {
       "support_verbosity": true,
@@ -94,4 +101,11 @@ export const GONKAGATE_MODEL_CATALOG: ModelCatalog = {
       "supports_reasoning_summaries": true
     }
   ]
-};
+} as const satisfies ModelCatalogShape;
+
+export type ModelCatalogEntry =
+  (typeof GONKAGATE_MODEL_CATALOG.models)[number];
+
+export interface ModelCatalog {
+  readonly models: readonly ModelCatalogEntry[];
+}

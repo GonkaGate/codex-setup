@@ -5,23 +5,41 @@ import {
 import type { TrackedLocalConfigAction } from "./prompts.js";
 import type { InstallPaths, InstallScope } from "./settings-paths.js";
 
-export interface ScopeDetails {
-  finalScope: InstallScope;
-  projectConfigPath?: string;
+type LocalScopePaths = Pick<InstallPaths, "projectConfigPath" | "projectRoot">;
+
+export interface UserScopeDetails {
+  finalScope: "user";
+  projectConfigPath?: never;
   switchedToUserScope: boolean;
-  trustTargetPath?: string;
+  trustTargetPath?: never;
 }
 
-export interface ScopeResolution {
-  details: ScopeDetails;
+export interface LocalScopeDetails {
+  finalScope: "local";
+  projectConfigPath: string;
+  switchedToUserScope: false;
+  trustTargetPath: string;
+}
+
+export type ScopeDetails = UserScopeDetails | LocalScopeDetails;
+
+export interface UserScopeResolution {
+  details: UserScopeDetails;
+  localProjectConfigExcludeTarget?: never;
+}
+
+export interface LocalScopeResolution {
+  details: LocalScopeDetails;
   localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget;
 }
+
+export type ScopeResolution = UserScopeResolution | LocalScopeResolution;
 
 export interface ResolveInstallScopeInput {
   inspectLocalProjectConfig: (
     targetPath: string,
   ) => Promise<LocalProjectConfigInspection>;
-  installPaths: Pick<InstallPaths, "projectConfigPath" | "projectRoot">;
+  installPaths: LocalScopePaths;
   promptForTrackedLocalConfigAction: (
     repoRelativeConfigPath: string,
   ) => Promise<TrackedLocalConfigAction>;
@@ -70,7 +88,7 @@ async function resolveLocalScopeRequest(
 
 export function createUserScopeDetails(
   switchedToUserScope: boolean,
-): ScopeDetails {
+): UserScopeDetails {
   return {
     finalScope: "user",
     switchedToUserScope,
@@ -78,8 +96,8 @@ export function createUserScopeDetails(
 }
 
 export function createLocalScopeDetails(
-  installPaths: Pick<InstallPaths, "projectConfigPath" | "projectRoot">,
-): ScopeDetails {
+  installPaths: LocalScopePaths,
+): LocalScopeDetails {
   return {
     finalScope: "local",
     projectConfigPath: installPaths.projectConfigPath,
@@ -90,16 +108,16 @@ export function createLocalScopeDetails(
 
 function createUserScopeResolution(
   switchedToUserScope: boolean,
-): ScopeResolution {
+): UserScopeResolution {
   return {
     details: createUserScopeDetails(switchedToUserScope),
   };
 }
 
 function createLocalScopeResolution(
-  installPaths: Pick<InstallPaths, "projectConfigPath" | "projectRoot">,
+  installPaths: LocalScopePaths,
   localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget,
-): ScopeResolution {
+): LocalScopeResolution {
   return {
     details: createLocalScopeDetails(installPaths),
     ...(localProjectConfigExcludeTarget

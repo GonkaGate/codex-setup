@@ -71,11 +71,7 @@ test("formatIntroOutput keeps installer framing separate from command parsing", 
 
 test("formatSuccessOutput groups optional sections without mixing concerns", () => {
   const output = formatSuccessOutput(
-    createInstallOutcome({
-      finalScope: "local",
-      projectConfigPath: "/Users/test/project/.codex/config.toml",
-      switchedToUserScope: true,
-      trustTargetPath: "/Users/test/project",
+    createLocalInstallOutcome({
       writes: [
         {
           backupPath: "/Users/test/.codex/config.toml.bak",
@@ -93,10 +89,7 @@ test("formatSuccessOutput groups optional sections without mixing concerns", () 
   );
 
   assert.match(output, /Install complete\./);
-  assert.match(
-    output,
-    /Activation scope: local \(switched from local because \.codex\/config\.toml is tracked\)/,
-  );
+  assert.match(output, /Activation scope: local/);
   assert.match(
     output,
     /Updated files:\n- \/Users\/test\/\.codex\/config\.toml/,
@@ -112,9 +105,25 @@ test("formatSuccessOutput groups optional sections without mixing concerns", () 
   );
 });
 
+test("formatSuccessOutput explains when a local request switches to user scope", () => {
+  const output = formatSuccessOutput(
+    createUserInstallOutcome({
+      requestedScope: "local",
+      switchedToUserScope: true,
+    }),
+  );
+
+  assert.match(output, /Activation scope: user/);
+  assert.match(
+    output,
+    /switched from local because \.codex\/config\.toml is tracked/,
+  );
+  assert.equal(output.includes("Local scope details:"), false);
+});
+
 test("formatSuccessOutput omits empty optional sections for user scope", () => {
   const output = formatSuccessOutput(
-    createInstallOutcome({
+    createUserInstallOutcome({
       writes: [
         {
           changed: true,
@@ -130,34 +139,47 @@ test("formatSuccessOutput omits empty optional sections for user scope", () => {
   assert.equal(output.includes("Local scope details:"), false);
 });
 
-function createInstallOutcome(
-  overrides: Partial<InstallOutcome> = {},
-): InstallOutcome {
-  const finalScope = overrides.finalScope ?? "user";
-  const scopeDetails =
-    finalScope === "local"
-      ? createLocalScopeDetails({
-          projectConfigPath: "/Users/test/project/.codex/config.toml",
-          projectRoot: "/Users/test/project",
-        })
-      : createUserScopeDetails(overrides.switchedToUserScope ?? false);
+type UserInstallOutcome = Extract<InstallOutcome, { finalScope: "user" }>;
+type LocalInstallOutcome = Extract<InstallOutcome, { finalScope: "local" }>;
 
+function createUserInstallOutcome(
+  overrides: Partial<UserInstallOutcome> = {},
+): UserInstallOutcome {
   return {
-    ...scopeDetails,
+    ...createUserScopeDetails(overrides.switchedToUserScope ?? false),
+    ...createCommonInstallOutcomeFields(),
+    requestedScope: "user",
+    writes: [],
+    ...overrides,
+  };
+}
+
+function createLocalInstallOutcome(
+  overrides: Partial<LocalInstallOutcome> = {},
+): LocalInstallOutcome {
+  return {
+    ...createLocalScopeDetails({
+      projectConfigPath: "/Users/test/project/.codex/config.toml",
+      projectRoot: "/Users/test/project",
+    }),
+    ...createCommonInstallOutcomeFields(),
+    requestedScope: "local",
+    writes: [],
+    ...overrides,
+  };
+}
+
+function createCommonInstallOutcomeFields() {
+  return {
     codex: {
       command: "codex",
       version: "0.118.0",
     },
-    finalScope,
     helperPath: "/Users/test/.codex/bin/gonkagate-token",
     modelCatalogPath: "/Users/test/.codex/model-catalogs/gonkagate.json",
     projectRoot: "/Users/test/project",
-    requestedScope: "user",
     selectedModel: DEFAULT_MODEL,
-    switchedToUserScope: false,
     tokenPath: "/Users/test/.codex/gonkagate/token",
     userConfigPath: "/Users/test/.codex/config.toml",
-    writes: [],
-    ...overrides,
   };
 }

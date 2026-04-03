@@ -173,7 +173,7 @@ async function runSelectPrompt<Value>(
     assertInteractiveTty();
   }
 
-  const runner = selectRunner ?? (select as SelectPromptRunner<Value>);
+  const runner = selectRunner ?? runDefaultSelectPrompt;
   return runner(config).catch(rethrowPromptExit);
 }
 
@@ -192,25 +192,32 @@ function rethrowPromptExit(error: unknown): never {
 
 interface SelectPromptChoice<Value> {
   description?: string;
+  disabled?: boolean | string;
   name: string;
   short?: string;
+  type?: never;
   value: Value;
 }
 
-interface SelectPromptConfig<Value> {
+type InquirerSelectConfig = Parameters<typeof select>[0];
+
+type SelectPromptConfig<Value> = Omit<
+  InquirerSelectConfig,
+  "choices" | "default"
+> & {
   choices: readonly SelectPromptChoice<Value>[];
   default: Value;
-  loop?: boolean;
-  message: string;
-  pageSize?: number;
-  theme?: {
-    indexMode?: "hidden" | "number";
-  };
-}
+};
 
 type SelectPromptRunner<Value> = (
   config: SelectPromptConfig<Value>,
 ) => Promise<Value>;
+
+function runDefaultSelectPrompt<Value>(
+  config: SelectPromptConfig<Value>,
+): Promise<Value> {
+  return select(config);
+}
 
 const NUMBERED_SELECT_THEME = {
   indexMode: "number",

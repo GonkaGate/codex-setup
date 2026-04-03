@@ -30,6 +30,52 @@ interface ExistingInstallConfigs {
   userConfig: TomlTable;
 }
 
+type ManagedProviderId = typeof GONKAGATE_PROVIDER_ID;
+
+interface ActivationConfigPatch extends TomlTable {
+  model: SupportedModel["modelId"];
+  model_catalog_json: string;
+  model_provider: ManagedProviderId;
+}
+
+interface TokenAuthConfigBase extends TomlTable {
+  command: string;
+  cwd: string;
+  refresh_interval_ms: number;
+  timeout_ms: number;
+}
+
+interface TokenAuthConfigWithArgs extends TokenAuthConfigBase {
+  args: string[];
+}
+
+type TokenAuthConfig = TokenAuthConfigBase | TokenAuthConfigWithArgs;
+
+interface ProviderConfig extends TomlTable {
+  auth: TokenAuthConfig;
+  base_url: typeof GONKAGATE_BASE_URL;
+  name: typeof GONKAGATE_PROVIDER_NAME;
+  supports_websockets: false;
+  wire_api: "responses";
+}
+
+interface ProviderConfigPatch extends TomlTable {
+  model_providers: Record<ManagedProviderId, ProviderConfig>;
+}
+
+interface TrustedProjectConfig extends TomlTable {
+  trust_level: "trusted";
+}
+
+interface TrustConfigPatch extends TomlTable {
+  projects: Record<string, TrustedProjectConfig>;
+}
+
+type ManagedConfigPatch =
+  | ActivationConfigPatch
+  | ProviderConfigPatch
+  | TrustConfigPatch;
+
 export interface PlannedConfigWrite {
   config: TomlTable;
   filePath: string;
@@ -174,7 +220,9 @@ function buildLocalScopeProjectConfig(
   return buildActivationConfigPatch(selectedModel, modelCatalogPath);
 }
 
-function mergeConfigFragments(...patches: readonly TomlTable[]): TomlTable {
+function mergeConfigFragments(
+  ...patches: readonly ManagedConfigPatch[]
+): TomlTable {
   let mergedConfig: TomlTable = {};
 
   for (const patch of patches) {
@@ -187,7 +235,7 @@ function mergeConfigFragments(...patches: readonly TomlTable[]): TomlTable {
 function buildActivationConfigPatch(
   selectedModel: SupportedModel,
   modelCatalogPath: string,
-): TomlTable {
+): ActivationConfigPatch {
   return {
     model: selectedModel.modelId,
     model_catalog_json: modelCatalogPath,
@@ -198,7 +246,7 @@ function buildActivationConfigPatch(
 function buildProviderConfigPatch(
   codexHome: string,
   tokenCommand: TokenCommandConfig,
-): TomlTable {
+): ProviderConfigPatch {
   return {
     model_providers: {
       [GONKAGATE_PROVIDER_ID]: buildProviderConfig(codexHome, tokenCommand),
@@ -206,7 +254,7 @@ function buildProviderConfigPatch(
   };
 }
 
-function buildTrustConfigPatch(projectRoot: string): TomlTable {
+function buildTrustConfigPatch(projectRoot: string): TrustConfigPatch {
   return {
     projects: {
       [projectRoot]: {
@@ -219,17 +267,21 @@ function buildTrustConfigPatch(projectRoot: string): TomlTable {
 function buildProviderConfig(
   codexHome: string,
   tokenCommand: TokenCommandConfig,
-): TomlTable {
-  const authConfig: TomlTable = {
+): ProviderConfig {
+  const authConfigBase: TokenAuthConfigBase = {
     command: tokenCommand.command,
     cwd: codexHome,
     refresh_interval_ms: TOKEN_REFRESH_INTERVAL_MS,
     timeout_ms: TOKEN_COMMAND_TIMEOUT_MS,
   };
 
-  if (tokenCommand.args.length > 0) {
-    authConfig.args = [...tokenCommand.args];
-  }
+  const authConfig: TokenAuthConfig =
+    tokenCommand.args.length > 0
+      ? {
+          ...authConfigBase,
+          args: [...tokenCommand.args],
+        }
+      : authConfigBase;
 
   return {
     auth: authConfig,

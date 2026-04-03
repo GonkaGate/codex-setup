@@ -4,6 +4,9 @@ import { isMissingFileError } from "./error-codes.js";
 
 export type TomlTable = Parameters<typeof TOML.stringify>[0];
 export type TomlValue = TomlTable[string];
+type FlatTomlArray = boolean[] | Date[] | number[] | string[] | TomlTable[];
+type NestedTomlArray = FlatTomlArray[];
+type TomlArray = FlatTomlArray | NestedTomlArray;
 
 export interface LoadedTomlConfig {
   exists: boolean;
@@ -86,16 +89,68 @@ export function areEquivalentTomlTexts(
   return normalizeTomlText(currentText) === normalizeTomlText(nextText);
 }
 
-function cloneTomlValue<Value extends TomlValue>(value: Value): Value {
-  if (Array.isArray(value)) {
-    return value.map((item) => cloneTomlValue(item)) as Value;
+function cloneTomlValue(value: TomlValue): TomlValue {
+  if (isTomlArray(value)) {
+    return cloneTomlArray(value);
   }
 
   if (isPlainTomlTable(value)) {
-    return mergeTomlTables({}, value) as Value;
+    return mergeTomlTables({}, value);
   }
 
   return value;
+}
+
+function isTomlArray(value: TomlValue): value is TomlArray {
+  return Array.isArray(value);
+}
+
+function cloneTomlArray(value: TomlArray): TomlArray {
+  if (isNestedTomlArray(value)) {
+    return value.map((item) => cloneFlatTomlArray(item));
+  }
+
+  return cloneFlatTomlArray(value);
+}
+
+function cloneFlatTomlArray(value: FlatTomlArray): FlatTomlArray {
+  if (isBooleanTomlArray(value)) {
+    return [...value];
+  }
+
+  if (isDateTomlArray(value)) {
+    return [...value];
+  }
+
+  if (isNumberTomlArray(value)) {
+    return [...value];
+  }
+
+  if (isStringTomlArray(value)) {
+    return [...value];
+  }
+
+  return value.map((item) => mergeTomlTables({}, item));
+}
+
+function isNestedTomlArray(value: TomlArray): value is NestedTomlArray {
+  return value.length > 0 && value.every((item) => Array.isArray(item));
+}
+
+function isBooleanTomlArray(value: FlatTomlArray): value is boolean[] {
+  return value.length > 0 && value.every((item) => typeof item === "boolean");
+}
+
+function isDateTomlArray(value: FlatTomlArray): value is Date[] {
+  return value.length > 0 && value.every((item) => item instanceof Date);
+}
+
+function isNumberTomlArray(value: FlatTomlArray): value is number[] {
+  return value.length > 0 && value.every((item) => typeof item === "number");
+}
+
+function isStringTomlArray(value: FlatTomlArray): value is string[] {
+  return value.length > 0 && value.every((item) => typeof item === "string");
 }
 
 function isPlainTomlTable(value: unknown): value is TomlTable {

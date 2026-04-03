@@ -10,10 +10,11 @@ import { DEFAULT_MODEL } from "../src/constants/models.js";
 import { buildBackupGlob } from "../src/install/backup.js";
 import { InstallCommitError } from "../src/install/install-errors.js";
 import { createTokenCommandConfig } from "../src/install/token-helper.js";
+import { createInstallScenario } from "./helpers/install-scenario.js";
 import {
   DEFAULT_TEST_API_KEY,
-  createInstallScenario,
-} from "./helpers/install-scenario.js";
+  createLoadedTomlConfig,
+} from "./helpers/install-fixtures.js";
 import {
   expectJsonArray,
   expectJsonObject,
@@ -343,12 +344,7 @@ test("prepare failures stop before repo exclusion and managed file writes begin"
         loadCount += 1;
 
         if (loadCount === 1) {
-          return {
-            exists: false,
-            filePath,
-            settings: {},
-            text: "",
-          };
+          return createLoadedTomlConfig(filePath, {}, { exists: false });
         }
 
         throw new Error("project config is invalid");

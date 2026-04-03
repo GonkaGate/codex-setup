@@ -6,10 +6,11 @@ import {
   type InstallUseCaseDependencyOverrides,
   type InstallUseCaseDependencies,
 } from "../../src/install/install-use-case.js";
+import {
+  DEFAULT_TEST_API_KEY,
+  DEFAULT_TEST_CODEX_VERSION,
+} from "./install-fixtures.js";
 import { createTempWorkspace } from "./workspace.js";
-
-export const DEFAULT_TEST_API_KEY = "gp-test-key-123456";
-const DEFAULT_CODEX_VERSION = "0.118.0";
 
 interface InstallDependencyOptions {
   apiKey?: string;
@@ -46,7 +47,7 @@ function createInstallDependencyOverrides(options: InstallDependencyOptions) {
     input: {
       checkCodexAvailable: () => ({
         command: "codex",
-        version: options.codexVersion ?? DEFAULT_CODEX_VERSION,
+        version: options.codexVersion ?? DEFAULT_TEST_CODEX_VERSION,
       }),
       environment: {
         ...process.env,

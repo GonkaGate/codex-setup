@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { areEquivalentTomlTexts } from "../src/install/toml-config.js";
@@ -45,4 +45,35 @@ test("contentComparator still allows real changes to create backups", async () =
   assert.equal(result.backupPath, backupPath);
   assert.equal(backupCalls, 1);
   assert.equal(await readFile(filePath, "utf8"), 'model = "gpt-5.3"\n');
+});
+
+test("writeManagedTextFile rejects directory targets", async () => {
+  const workspace = await createTempWorkspace("codex-setup-managed-directory");
+  const filePath = path.join(workspace, "config.toml");
+  await mkdir(filePath, {
+    recursive: true,
+  });
+
+  await assert.rejects(
+    () => writeManagedTextFile(filePath, 'model = "gpt-5.4"\n'),
+    /Refusing to overwrite directory/,
+  );
+});
+
+test("writeManagedTextFile rejects symlink targets", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("File symlink setup is not reliable on Windows CI.");
+    return;
+  }
+
+  const workspace = await createTempWorkspace("codex-setup-managed-symlink");
+  const realFilePath = path.join(workspace, "real-config.toml");
+  const symlinkPath = path.join(workspace, "config.toml");
+  await writeFile(realFilePath, 'model = "gpt-5.4"\n', "utf8");
+  await symlink(realFilePath, symlinkPath, "file");
+
+  await assert.rejects(
+    () => writeManagedTextFile(symlinkPath, 'model = "gpt-5.3"\n'),
+    /Refusing to overwrite symlink/,
+  );
 });

@@ -7,55 +7,24 @@ import {
   type ManagedWritePlan,
   type PlanInstallManagedWritesInput,
 } from "../src/install/install-managed-writes.js";
-import type {
-  LoadedTomlConfig,
-  TomlTable,
-} from "../src/install/toml-config.js";
-import type {
-  InstallPaths,
-  InstallScope,
-} from "../src/install/settings-paths.js";
-import type { TokenCommandConfig } from "../src/install/token-helper.js";
-
-const testInstallPaths: InstallPaths = {
-  codexHome: "/Users/test/.codex",
-  modelCatalogPath: "/Users/test/.codex/model-catalogs/gonkagate.json",
-  projectConfigPath: "/Users/test/project/.codex/config.toml",
-  projectRoot: "/Users/test/project",
-  tokenPath: "/Users/test/.codex/gonkagate/token",
-  userConfigPath: "/Users/test/.codex/config.toml",
-};
-
-const testTokenCommand: TokenCommandConfig = {
-  args: [],
-  command: "/Users/test/.codex/bin/gonkagate-token",
-  content: "#!/usr/bin/env node\n",
-  fileMode: 0o700,
-  helperFilePath: "/Users/test/.codex/bin/gonkagate-token",
-};
+import type { InstallScope } from "../src/install/settings-paths.js";
+import {
+  DEFAULT_TEST_API_KEY,
+  TEST_INSTALL_PATHS,
+  TEST_TOKEN_COMMAND,
+  createLoadedTomlConfig,
+} from "./helpers/install-fixtures.js";
 
 function createPlanInput(
   finalScope: InstallScope,
 ): PlanInstallManagedWritesInput {
   return {
-    apiKey: "gp-test-key-123456",
+    apiKey: DEFAULT_TEST_API_KEY,
     finalScope,
-    installPaths: testInstallPaths,
+    installPaths: TEST_INSTALL_PATHS,
     loadTomlConfig: async (filePath) => createLoadedTomlConfig(filePath, {}),
     selectedModel: DEFAULT_MODEL,
-    tokenCommand: testTokenCommand,
-  };
-}
-
-function createLoadedTomlConfig(
-  filePath: string,
-  settings: TomlTable,
-): LoadedTomlConfig {
-  return {
-    exists: true,
-    filePath,
-    settings,
-    text: "",
+    tokenCommand: TEST_TOKEN_COMMAND,
   };
 }
 
@@ -75,10 +44,10 @@ test("planInstallManagedWrites keeps user-scope config after secret and helper w
     ["token", "token_helper", "model_catalog", "user_config"],
   );
   assert.deepEqual(createWritePathMap(writes), {
-    model_catalog: testInstallPaths.modelCatalogPath,
-    token: testInstallPaths.tokenPath,
-    token_helper: testTokenCommand.helperFilePath,
-    user_config: testInstallPaths.userConfigPath,
+    model_catalog: TEST_INSTALL_PATHS.modelCatalogPath,
+    token: TEST_INSTALL_PATHS.tokenPath,
+    token_helper: TEST_TOKEN_COMMAND.helperFilePath,
+    user_config: TEST_INSTALL_PATHS.userConfigPath,
   });
   assert.equal(
     writes.some((write) => write.kind === "project_config"),
@@ -94,11 +63,11 @@ test("planInstallManagedWrites appends local project config after the user layer
     ["token", "token_helper", "model_catalog", "user_config", "project_config"],
   );
   assert.deepEqual(createWritePathMap(writes), {
-    model_catalog: testInstallPaths.modelCatalogPath,
-    project_config: testInstallPaths.projectConfigPath,
-    token: testInstallPaths.tokenPath,
-    token_helper: testTokenCommand.helperFilePath,
-    user_config: testInstallPaths.userConfigPath,
+    model_catalog: TEST_INSTALL_PATHS.modelCatalogPath,
+    project_config: TEST_INSTALL_PATHS.projectConfigPath,
+    token: TEST_INSTALL_PATHS.tokenPath,
+    token_helper: TEST_TOKEN_COMMAND.helperFilePath,
+    user_config: TEST_INSTALL_PATHS.userConfigPath,
   });
 });
 

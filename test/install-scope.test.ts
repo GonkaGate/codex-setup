@@ -9,11 +9,7 @@ import type {
   TrackedLocalProjectConfigInspection,
   UntrackedLocalProjectConfigInspection,
 } from "../src/install/local-project-config.js";
-
-const testInstallPaths = {
-  projectConfigPath: "/Users/test/project/.codex/config.toml",
-  projectRoot: "/Users/test/project",
-};
+import { TEST_LOCAL_SCOPE_PATHS } from "./helpers/install-fixtures.js";
 
 test("resolveInstallScope keeps user scope without local config inspection", async () => {
   let inspectCount = 0;
@@ -26,7 +22,7 @@ test("resolveInstallScope keeps user scope without local config inspection", asy
         kind: "outside_repo",
       };
     },
-    installPaths: testInstallPaths,
+    installPaths: TEST_LOCAL_SCOPE_PATHS,
     promptForTrackedLocalConfigAction: async () => {
       promptCount += 1;
       return "user";
@@ -48,7 +44,7 @@ test("resolveInstallScope keeps local scope when the project config is outside g
     inspectLocalProjectConfig: async () => ({
       kind: "outside_repo",
     }),
-    installPaths: testInstallPaths,
+    installPaths: TEST_LOCAL_SCOPE_PATHS,
     promptForTrackedLocalConfigAction: async () => {
       promptCount += 1;
       return "user";
@@ -57,7 +53,7 @@ test("resolveInstallScope keeps local scope when the project config is outside g
   });
 
   assert.deepEqual(resolution, {
-    ...createLocalScopeDetails(testInstallPaths),
+    ...createLocalScopeDetails(TEST_LOCAL_SCOPE_PATHS),
   });
   assert.equal(promptCount, 0);
 });
@@ -67,13 +63,13 @@ test("resolveInstallScope returns an exclude target for untracked local configs"
 
   const resolution = await resolveInstallScope({
     inspectLocalProjectConfig: async () => untrackedInspection,
-    installPaths: testInstallPaths,
+    installPaths: TEST_LOCAL_SCOPE_PATHS,
     promptForTrackedLocalConfigAction: async () => "user",
     requestedScope: "local",
   });
 
   assert.deepEqual(resolution, {
-    ...createLocalScopeDetails(testInstallPaths),
+    ...createLocalScopeDetails(TEST_LOCAL_SCOPE_PATHS),
     localProjectConfigExcludeTarget: {
       gitDir: untrackedInspection.gitContext.gitDir,
       repoRelativeConfigPath: untrackedInspection.repoRelativeConfigPath,
@@ -87,7 +83,7 @@ test("resolveInstallScope switches tracked local config to user scope when reque
 
   const resolution = await resolveInstallScope({
     inspectLocalProjectConfig: async () => trackedInspection,
-    installPaths: testInstallPaths,
+    installPaths: TEST_LOCAL_SCOPE_PATHS,
     promptForTrackedLocalConfigAction: async (repoRelativeConfigPath) => {
       promptTarget = repoRelativeConfigPath;
       return "user";
@@ -106,7 +102,7 @@ test("resolveInstallScope can cancel tracked local config installs", async () =>
     () =>
       resolveInstallScope({
         inspectLocalProjectConfig: async () => createTrackedInspection(),
-        installPaths: testInstallPaths,
+        installPaths: TEST_LOCAL_SCOPE_PATHS,
         promptForTrackedLocalConfigAction: async () => "cancel",
         requestedScope: "local",
       }),
@@ -118,7 +114,7 @@ function createTrackedInspection(): TrackedLocalProjectConfigInspection {
   return {
     gitContext: {
       gitDir: "/Users/test/project/.git",
-      repoRoot: testInstallPaths.projectRoot,
+      repoRoot: TEST_LOCAL_SCOPE_PATHS.projectRoot,
     },
     kind: "tracked",
     repoRelativeConfigPath: ".codex/config.toml",
@@ -133,7 +129,7 @@ function createUntrackedInspection(): UntrackedLocalProjectConfigInspection {
     },
     gitContext: {
       gitDir: "/Users/test/project/.git",
-      repoRoot: testInstallPaths.projectRoot,
+      repoRoot: TEST_LOCAL_SCOPE_PATHS.projectRoot,
     },
     kind: "untracked",
     repoRelativeConfigPath: ".codex/config.toml",

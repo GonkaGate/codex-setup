@@ -6,7 +6,7 @@ import {
   TOKEN_REFRESH_INTERVAL_MS,
 } from "../constants/gateway.js";
 import type { SupportedModel } from "../constants/models.js";
-import type { InstallPaths } from "./settings-paths.js";
+import type { InstallPaths, InstallScope } from "./settings-paths.js";
 import {
   mergeTomlTables,
   type LoadedTomlConfig,
@@ -31,59 +31,7 @@ interface CommonInstallConfigPlanInput {
   tokenCommand: TokenCommandConfig;
 }
 
-interface UserInstallConfigs {
-  userConfig: TomlTable;
-}
-
-interface LocalInstallConfigs extends UserInstallConfigs {
-  projectConfig: TomlTable;
-}
-
-type ManagedProviderId = typeof GONKAGATE_PROVIDER_ID;
-
-interface ActivationConfigPatch {
-  model: SupportedModel["modelId"];
-  model_catalog_json: string;
-  model_provider: ManagedProviderId;
-}
-
-interface TokenAuthConfigBase {
-  command: string;
-  cwd: string;
-  refresh_interval_ms: number;
-  timeout_ms: number;
-}
-
-interface TokenAuthConfigWithArgs extends TokenAuthConfigBase {
-  args: string[];
-}
-
-type TokenAuthConfig = TokenAuthConfigBase | TokenAuthConfigWithArgs;
-
-interface ProviderConfig {
-  auth: TokenAuthConfig;
-  base_url: typeof GONKAGATE_BASE_URL;
-  name: typeof GONKAGATE_PROVIDER_NAME;
-  supports_websockets: false;
-  wire_api: "responses";
-}
-
-interface ProviderConfigPatch {
-  model_providers: Record<ManagedProviderId, ProviderConfig>;
-}
-
-interface TrustedProjectConfig {
-  trust_level: "trusted";
-}
-
-interface TrustConfigPatch {
-  projects: Record<string, TrustedProjectConfig>;
-}
-
-type ManagedConfigPatch =
-  | ActivationConfigPatch
-  | ProviderConfigPatch
-  | TrustConfigPatch;
+type ExistingInstallConfigs = Partial<Record<ConfigTarget, TomlTable>>;
 
 export interface PlannedConfigWrite {
   config: TomlTable;
@@ -91,49 +39,30 @@ export interface PlannedConfigWrite {
   target: ConfigTarget;
 }
 
-interface BuildUserInstallConfigPlanInput extends CommonInstallConfigPlanInput {
-  existingConfigs: UserInstallConfigs;
-  finalScope: "user";
+export interface BuildInstallConfigPlanInput extends CommonInstallConfigPlanInput {
+  existingConfigs: ExistingInstallConfigs;
+  finalScope: InstallScope;
 }
 
-interface BuildLocalInstallConfigPlanInput extends CommonInstallConfigPlanInput {
-  existingConfigs: LocalInstallConfigs;
-  finalScope: "local";
-}
-
-export type BuildInstallConfigPlanInput =
-  | BuildUserInstallConfigPlanInput
-  | BuildLocalInstallConfigPlanInput;
-
-interface CommonPlanInstallConfigWritesInput extends CommonInstallConfigPlanInput {
+export interface PlanInstallConfigWritesInput extends CommonInstallConfigPlanInput {
+  finalScope: InstallScope;
   loadTomlConfig: (filePath: string) => Promise<LoadedTomlConfig>;
 }
 
-interface PlanUserInstallConfigWritesInput extends CommonPlanInstallConfigWritesInput {
-  finalScope: "user";
+interface InstallConfigLayer {
+  filePath: string;
+  patch: TomlTable;
+  target: ConfigTarget;
 }
-
-interface PlanLocalInstallConfigWritesInput extends CommonPlanInstallConfigWritesInput {
-  finalScope: "local";
-}
-
-export type PlanInstallConfigWritesInput =
-  | PlanUserInstallConfigWritesInput
-  | PlanLocalInstallConfigWritesInput;
 
 export async function planInstallConfigWrites(
   input: PlanInstallConfigWritesInput,
 ): Promise<PlannedConfigWrite[]> {
-  if (input.finalScope === "user") {
-    const existingConfigs = await loadUserInstallConfigs(input);
-
-    return buildInstallConfigPlan({
-      ...input,
-      existingConfigs,
-    });
-  }
-
-  const existingConfigs = await loadLocalInstallConfigs(input);
+  const configLayers = listInstallConfigLayers(input);
+  const existingConfigs = await loadExistingInstallConfigs(
+    configLayers,
+    input.loadTomlConfig,
+  );
 
   return buildInstallConfigPlan({
     ...input,
@@ -144,72 +73,78 @@ export async function planInstallConfigWrites(
 export function buildInstallConfigPlan(
   input: BuildInstallConfigPlanInput,
 ): PlannedConfigWrite[] {
+  return listInstallConfigLayers(input).map((layer) =>
+    createConfigWrite(
+      layer.target,
+      layer.filePath,
+      mergeTomlTables(input.existingConfigs[layer.target] ?? {}, layer.patch),
+    ),
+  );
+}
+
+async function loadExistingInstallConfigs(
+  configLayers: readonly InstallConfigLayer[],
+  loadTomlConfig: (filePath: string) => Promise<LoadedTomlConfig>,
+): Promise<ExistingInstallConfigs> {
+  const existingConfigs: ExistingInstallConfigs = {};
+
+  for (const layer of configLayers) {
+    existingConfigs[layer.target] = (
+      await loadTomlConfig(layer.filePath)
+    ).settings;
+  }
+
+  return existingConfigs;
+}
+
+function listInstallConfigLayers(
+  input: CommonInstallConfigPlanInput & { finalScope: InstallScope },
+): InstallConfigLayer[] {
   if (input.finalScope === "user") {
     return [
-      createConfigWrite(
+      createConfigLayer(
         "user",
         input.paths.userConfigPath,
-        mergeTomlTables(
-          input.existingConfigs.userConfig,
-          buildUserScopeConfig(
-            input.selectedModel,
-            input.paths.modelCatalogPath,
-            input.paths.codexHome,
-            input.tokenCommand,
-          ),
+        buildUserScopeConfigTable(
+          input.selectedModel,
+          input.paths.modelCatalogPath,
+          input.paths.codexHome,
+          input.tokenCommand,
         ),
       ),
     ];
   }
 
   return [
-    createConfigWrite(
+    createConfigLayer(
       "user",
       input.paths.userConfigPath,
-      mergeTomlTables(
-        input.existingConfigs.userConfig,
-        buildLocalScopeUserConfig(
-          input.paths.projectRoot,
-          input.paths.codexHome,
-          input.tokenCommand,
-        ),
+      buildLocalScopeUserConfigTable(
+        input.paths.projectRoot,
+        input.paths.codexHome,
+        input.tokenCommand,
       ),
     ),
-    createConfigWrite(
+    createConfigLayer(
       "project",
       input.paths.projectConfigPath,
-      mergeTomlTables(
-        input.existingConfigs.projectConfig,
-        buildLocalScopeProjectConfig(
-          input.selectedModel,
-          input.paths.modelCatalogPath,
-        ),
+      buildLocalScopeProjectConfigTable(
+        input.selectedModel,
+        input.paths.modelCatalogPath,
       ),
     ),
   ];
 }
 
-async function loadUserInstallConfigs(
-  input: PlanUserInstallConfigWritesInput,
-): Promise<UserInstallConfigs> {
-  const userConfig = (await input.loadTomlConfig(input.paths.userConfigPath))
-    .settings;
-
+function createConfigLayer(
+  target: ConfigTarget,
+  filePath: string,
+  patch: TomlTable,
+): InstallConfigLayer {
   return {
-    userConfig,
-  };
-}
-
-async function loadLocalInstallConfigs(
-  input: PlanLocalInstallConfigWritesInput,
-): Promise<LocalInstallConfigs> {
-  const userConfig = (await input.loadTomlConfig(input.paths.userConfigPath))
-    .settings;
-
-  return {
-    projectConfig: (await input.loadTomlConfig(input.paths.projectConfigPath))
-      .settings,
-    userConfig,
+    filePath,
+    patch,
+    target,
   };
 }
 
@@ -225,174 +160,110 @@ function createConfigWrite(
   };
 }
 
-function buildUserScopeConfig(
+function buildUserScopeConfigTable(
   selectedModel: SupportedModel,
   modelCatalogPath: string,
   codexHome: string,
   tokenCommand: TokenCommandConfig,
 ): TomlTable {
-  return mergeConfigFragments(
-    buildActivationConfigPatch(selectedModel, modelCatalogPath),
-    buildProviderConfigPatch(codexHome, tokenCommand),
+  return mergeConfigTables(
+    buildActivationConfigTable(selectedModel, modelCatalogPath),
+    buildProviderConfigTable(codexHome, tokenCommand),
   );
 }
 
-function buildLocalScopeUserConfig(
+function buildLocalScopeUserConfigTable(
   projectRoot: string,
   codexHome: string,
   tokenCommand: TokenCommandConfig,
 ): TomlTable {
-  return mergeConfigFragments(
-    buildProviderConfigPatch(codexHome, tokenCommand),
-    buildTrustConfigPatch(projectRoot),
+  return mergeConfigTables(
+    buildProviderConfigTable(codexHome, tokenCommand),
+    buildTrustConfigTable(projectRoot),
   );
 }
 
-function buildLocalScopeProjectConfig(
+function buildLocalScopeProjectConfigTable(
   selectedModel: SupportedModel,
   modelCatalogPath: string,
 ): TomlTable {
-  return toTomlTable(
-    buildActivationConfigPatch(selectedModel, modelCatalogPath),
-  );
+  return buildActivationConfigTable(selectedModel, modelCatalogPath);
 }
 
-function mergeConfigFragments(
-  ...patches: readonly ManagedConfigPatch[]
-): TomlTable {
+function mergeConfigTables(...configTables: readonly TomlTable[]): TomlTable {
   let mergedConfig: TomlTable = {};
 
-  for (const patch of patches) {
-    mergedConfig = mergeTomlTables(mergedConfig, toTomlTable(patch));
+  for (const configTable of configTables) {
+    mergedConfig = mergeTomlTables(mergedConfig, configTable);
   }
 
   return mergedConfig;
 }
 
-function toTomlTable(patch: ManagedConfigPatch): TomlTable {
-  if ("model" in patch) {
-    return {
-      model: patch.model,
-      model_catalog_json: patch.model_catalog_json,
-      model_provider: patch.model_provider,
-    };
-  }
+function buildActivationConfigTable(
+  selectedModel: SupportedModel,
+  modelCatalogPath: string,
+): TomlTable {
+  return {
+    model: selectedModel.modelId,
+    model_catalog_json: modelCatalogPath,
+    model_provider: GONKAGATE_PROVIDER_ID,
+  };
+}
 
-  if ("model_providers" in patch) {
-    const modelProviders: TomlTable = {};
-    modelProviders[GONKAGATE_PROVIDER_ID] = toProviderConfigTable(
-      patch.model_providers[GONKAGATE_PROVIDER_ID],
-    );
+function buildProviderConfigTable(
+  codexHome: string,
+  tokenCommand: TokenCommandConfig,
+): TomlTable {
+  const modelProviders: TomlTable = {};
+  modelProviders[GONKAGATE_PROVIDER_ID] = buildGonkagateProviderTable(
+    codexHome,
+    tokenCommand,
+  );
 
-    return {
-      model_providers: modelProviders,
-    };
-  }
+  return {
+    model_providers: modelProviders,
+  };
+}
 
+function buildTrustConfigTable(projectRoot: string): TomlTable {
   const projects: TomlTable = {};
-
-  for (const [projectRoot, projectConfig] of Object.entries(patch.projects)) {
-    projects[projectRoot] = toTrustedProjectConfigTable(projectConfig);
-  }
+  projects[projectRoot] = {
+    trust_level: "trusted",
+  };
 
   return {
     projects,
   };
 }
 
-function toProviderConfigTable(providerConfig: ProviderConfig): TomlTable {
-  return {
-    auth: toTokenAuthConfigTable(providerConfig.auth),
-    base_url: providerConfig.base_url,
-    name: providerConfig.name,
-    supports_websockets: providerConfig.supports_websockets,
-    wire_api: providerConfig.wire_api,
-  };
-}
-
-function toTokenAuthConfigTable(authConfig: TokenAuthConfig): TomlTable {
-  if ("args" in authConfig) {
-    return {
-      args: [...authConfig.args],
-      command: authConfig.command,
-      cwd: authConfig.cwd,
-      refresh_interval_ms: authConfig.refresh_interval_ms,
-      timeout_ms: authConfig.timeout_ms,
-    };
-  }
-
-  return {
-    command: authConfig.command,
-    cwd: authConfig.cwd,
-    refresh_interval_ms: authConfig.refresh_interval_ms,
-    timeout_ms: authConfig.timeout_ms,
-  };
-}
-
-function toTrustedProjectConfigTable(
-  projectConfig: TrustedProjectConfig,
+function buildGonkagateProviderTable(
+  codexHome: string,
+  tokenCommand: TokenCommandConfig,
 ): TomlTable {
   return {
-    trust_level: projectConfig.trust_level,
-  };
-}
-
-function buildActivationConfigPatch(
-  selectedModel: SupportedModel,
-  modelCatalogPath: string,
-): ActivationConfigPatch {
-  return {
-    model: selectedModel.modelId,
-    model_catalog_json: modelCatalogPath,
-    model_provider: GONKAGATE_PROVIDER_ID,
-  } satisfies ActivationConfigPatch;
-}
-
-function buildProviderConfigPatch(
-  codexHome: string,
-  tokenCommand: TokenCommandConfig,
-): ProviderConfigPatch {
-  return {
-    model_providers: {
-      [GONKAGATE_PROVIDER_ID]: buildProviderConfig(codexHome, tokenCommand),
-    },
-  } satisfies ProviderConfigPatch;
-}
-
-function buildTrustConfigPatch(projectRoot: string): TrustConfigPatch {
-  return {
-    projects: {
-      [projectRoot]: {
-        trust_level: "trusted",
-      },
-    },
-  } satisfies TrustConfigPatch;
-}
-
-function buildProviderConfig(
-  codexHome: string,
-  tokenCommand: TokenCommandConfig,
-): ProviderConfig {
-  const authConfigBase = {
-    command: tokenCommand.command,
-    cwd: codexHome,
-    refresh_interval_ms: TOKEN_REFRESH_INTERVAL_MS,
-    timeout_ms: TOKEN_COMMAND_TIMEOUT_MS,
-  } satisfies TokenAuthConfigBase;
-
-  const authConfig: TokenAuthConfig =
-    tokenCommand.args.length > 0
-      ? ({
-          ...authConfigBase,
-          args: [...tokenCommand.args],
-        } satisfies TokenAuthConfigWithArgs)
-      : authConfigBase;
-
-  return {
-    auth: authConfig,
+    auth: buildTokenAuthConfigTable(codexHome, tokenCommand),
     base_url: GONKAGATE_BASE_URL,
     name: GONKAGATE_PROVIDER_NAME,
     supports_websockets: false,
     wire_api: "responses",
-  } satisfies ProviderConfig;
+  };
+}
+
+function buildTokenAuthConfigTable(
+  codexHome: string,
+  tokenCommand: TokenCommandConfig,
+): TomlTable {
+  const authConfig: TomlTable = {
+    command: tokenCommand.command,
+    cwd: codexHome,
+    refresh_interval_ms: TOKEN_REFRESH_INTERVAL_MS,
+    timeout_ms: TOKEN_COMMAND_TIMEOUT_MS,
+  };
+
+  if (tokenCommand.args.length > 0) {
+    authConfig.args = [...tokenCommand.args];
+  }
+
+  return authConfig;
 }

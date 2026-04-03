@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { lstat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
@@ -7,7 +6,11 @@ import {
   requireRepoRelativePath,
   type GitContext,
 } from "./git-context.js";
-import { hasErrorCode, isMissingFileError } from "./error-codes.js";
+import {
+  assertPathTargetIsNotSymlink,
+  inspectOptionalPathTarget,
+} from "./path-target-safety.js";
+import { hasErrorCode } from "./error-codes.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -179,19 +182,10 @@ async function assertPathIsNotSymlink(
   filePath: string,
   errorMessage: string,
 ): Promise<void> {
-  try {
-    const fileStats = await lstat(filePath);
-
-    if (fileStats.isSymbolicLink()) {
-      throw new Error(errorMessage);
-    }
-  } catch (error) {
-    if (isMissingFileError(error)) {
-      return;
-    }
-
-    throw error;
-  }
+  assertPathTargetIsNotSymlink(
+    await inspectOptionalPathTarget(filePath),
+    errorMessage,
+  );
 }
 
 // Walk every path component between the repo root and the config file so local

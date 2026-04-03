@@ -5,7 +5,7 @@ import test from "node:test";
 import { CONTRACT_METADATA } from "../contract-metadata.js";
 import { formatIntroOutput, formatSuccessOutput } from "../src/cli-output.js";
 import { GONKAGATE_BASE_URL } from "../src/constants/gateway.js";
-import { DEFAULT_MODEL, DEFAULT_MODEL_KEY } from "../src/constants/models.js";
+import { DEFAULT_MODEL_KEY } from "../src/constants/models.js";
 import { parseCliOptions } from "../src/cli.js";
 import {
   createLocalScopeDetails,
@@ -13,6 +13,10 @@ import {
 } from "../src/install/install-scope.js";
 import type { InstallOutcome } from "../src/install/install-use-case.js";
 import { escapeRegExp, repoRoot } from "./contract-helpers.js";
+import {
+  TEST_LOCAL_SCOPE_PATHS,
+  createCommonInstallOutcomeFields as createTestInstallOutcomeFields,
+} from "./helpers/install-fixtures.js";
 
 test("parseCliOptions reads curated model and scope flags", () => {
   const options = parseCliOptions([
@@ -147,7 +151,7 @@ function createUserInstallOutcome(
 ): UserInstallOutcome {
   return {
     ...createUserScopeDetails(overrides.switchedToUserScope ?? false),
-    ...createCommonInstallOutcomeFields(),
+    ...createTestInstallOutcomeFields(),
     requestedScope: "user",
     writes: [],
     ...overrides,
@@ -158,28 +162,10 @@ function createLocalInstallOutcome(
   overrides: Partial<LocalInstallOutcome> = {},
 ): LocalInstallOutcome {
   return {
-    ...createLocalScopeDetails({
-      projectConfigPath: "/Users/test/project/.codex/config.toml",
-      projectRoot: "/Users/test/project",
-    }),
-    ...createCommonInstallOutcomeFields(),
+    ...createLocalScopeDetails(TEST_LOCAL_SCOPE_PATHS),
+    ...createTestInstallOutcomeFields(),
     requestedScope: "local",
     writes: [],
     ...overrides,
-  };
-}
-
-function createCommonInstallOutcomeFields() {
-  return {
-    codex: {
-      command: "codex",
-      version: "0.118.0",
-    },
-    helperPath: "/Users/test/.codex/bin/gonkagate-token",
-    modelCatalogPath: "/Users/test/.codex/model-catalogs/gonkagate.json",
-    projectRoot: "/Users/test/project",
-    selectedModel: DEFAULT_MODEL,
-    tokenPath: "/Users/test/.codex/gonkagate/token",
-    userConfigPath: "/Users/test/.codex/config.toml",
   };
 }

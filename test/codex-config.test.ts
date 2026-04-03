@@ -13,48 +13,19 @@ import {
 import {
   areEquivalentTomlTexts,
   createManagedTomlConfigWrite,
-  type LoadedTomlConfig,
-  type TomlTable,
 } from "../src/install/toml-config.js";
-import type { TokenCommandConfig } from "../src/install/token-helper.js";
 import {
   expectTomlBoolean,
   expectTomlString,
   expectTomlTable,
 } from "./helpers/structured-data.js";
+import {
+  TEST_INSTALL_PATHS,
+  TEST_TOKEN_COMMAND,
+  createLoadedTomlConfig,
+} from "./helpers/install-fixtures.js";
 
-const testPaths: InstallConfigPaths = {
-  codexHome: "/Users/test/.codex",
-  modelCatalogPath: "/Users/test/.codex/model-catalogs/gonkagate.json",
-  projectConfigPath: "/Users/test/project/.codex/config.toml",
-  projectRoot: "/Users/test/project",
-  userConfigPath: "/Users/test/.codex/config.toml",
-};
-
-const testLayerPaths = {
-  projectConfigPath: "/Users/test/project/.codex/config.toml",
-  userConfigPath: "/Users/test/.codex/config.toml",
-};
-
-const testTokenCommand: TokenCommandConfig = {
-  args: [],
-  command: "/Users/test/.codex/bin/gonkagate-token",
-  content: "",
-  fileMode: 0o700,
-  helperFilePath: "/Users/test/.codex/bin/gonkagate-token",
-};
-
-function createLoadedTomlConfig(
-  filePath: string,
-  settings: TomlTable,
-): LoadedTomlConfig {
-  return {
-    exists: true,
-    filePath,
-    settings,
-    text: "",
-  };
-}
+const testPaths: InstallConfigPaths = TEST_INSTALL_PATHS;
 
 test("planInstallConfigWrites keeps user scope config ownership centralized", async () => {
   const [userLayer] = await planInstallConfigWrites({
@@ -62,7 +33,7 @@ test("planInstallConfigWrites keeps user scope config ownership centralized", as
     loadTomlConfig: async (filePath) =>
       createLoadedTomlConfig(
         filePath,
-        filePath === testLayerPaths.userConfigPath
+        filePath === testPaths.userConfigPath
           ? {
               analytics: {
                 enabled: false,
@@ -72,14 +43,13 @@ test("planInstallConfigWrites keeps user scope config ownership centralized", as
       ),
     paths: {
       ...testPaths,
-      ...testLayerPaths,
     },
     selectedModel: DEFAULT_MODEL,
-    tokenCommand: testTokenCommand,
+    tokenCommand: TEST_TOKEN_COMMAND,
   });
 
   assert.equal(userLayer.target, "user");
-  assert.equal(userLayer.filePath, testLayerPaths.userConfigPath);
+  assert.equal(userLayer.filePath, testPaths.userConfigPath);
   assert.equal(userLayer.config.model_provider, GONKAGATE_PROVIDER_ID);
   assert.equal(userLayer.config.model, DEFAULT_MODEL.modelId);
   assert.equal(userLayer.config.model_catalog_json, testPaths.modelCatalogPath);
@@ -102,7 +72,7 @@ test("planInstallConfigWrites splits local scope across user and project layers"
     loadTomlConfig: async (filePath) =>
       createLoadedTomlConfig(
         filePath,
-        filePath === testLayerPaths.projectConfigPath
+        filePath === testPaths.projectConfigPath
           ? {
               theme: "keep",
             }
@@ -114,10 +84,9 @@ test("planInstallConfigWrites splits local scope across user and project layers"
       ),
     paths: {
       ...testPaths,
-      ...testLayerPaths,
     },
     selectedModel: DEFAULT_MODEL,
-    tokenCommand: testTokenCommand,
+    tokenCommand: TEST_TOKEN_COMMAND,
   });
 
   assert.deepEqual(
@@ -144,7 +113,7 @@ test("planInstallConfigWrites splits local scope across user and project layers"
     `userLayer.config.projects.${testPaths.projectRoot}`,
   );
 
-  assert.equal(userLayer.filePath, testLayerPaths.userConfigPath);
+  assert.equal(userLayer.filePath, testPaths.userConfigPath);
   assert.equal(userLayer.config.model_provider, undefined);
   assert.equal(userLayer.config.model, undefined);
   assert.equal(
@@ -162,7 +131,7 @@ test("planInstallConfigWrites splits local scope across user and project layers"
     "trusted",
   );
 
-  assert.equal(projectLayer.filePath, testLayerPaths.projectConfigPath);
+  assert.equal(projectLayer.filePath, testPaths.projectConfigPath);
   assert.equal(projectLayer.config.model_provider, GONKAGATE_PROVIDER_ID);
   assert.equal(projectLayer.config.model, DEFAULT_MODEL.modelId);
   assert.equal(
@@ -182,13 +151,12 @@ test("planInstallConfigWrites only loads config files for the active scope layer
     },
     paths: {
       ...testPaths,
-      ...testLayerPaths,
     },
     selectedModel: DEFAULT_MODEL,
-    tokenCommand: testTokenCommand,
+    tokenCommand: TEST_TOKEN_COMMAND,
   });
 
-  assert.deepEqual(userScopeLoads, [testLayerPaths.userConfigPath]);
+  assert.deepEqual(userScopeLoads, [testPaths.userConfigPath]);
 
   const localScopeLoads: string[] = [];
   await planInstallConfigWrites({
@@ -199,22 +167,21 @@ test("planInstallConfigWrites only loads config files for the active scope layer
     },
     paths: {
       ...testPaths,
-      ...testLayerPaths,
     },
     selectedModel: DEFAULT_MODEL,
-    tokenCommand: testTokenCommand,
+    tokenCommand: TEST_TOKEN_COMMAND,
   });
 
   assert.deepEqual(localScopeLoads, [
-    testLayerPaths.userConfigPath,
-    testLayerPaths.projectConfigPath,
+    testPaths.userConfigPath,
+    testPaths.projectConfigPath,
   ]);
 });
 
 test("buildInstallConfigPlan keeps pure config merging separate from file loading", () => {
   const [userLayer] = buildInstallConfigPlan({
     existingConfigs: {
-      userConfig: {
+      user: {
         analytics: {
           enabled: false,
         },
@@ -223,10 +190,9 @@ test("buildInstallConfigPlan keeps pure config merging separate from file loadin
     finalScope: "user",
     paths: {
       ...testPaths,
-      ...testLayerPaths,
     },
     selectedModel: DEFAULT_MODEL,
-    tokenCommand: testTokenCommand,
+    tokenCommand: TEST_TOKEN_COMMAND,
   });
 
   assert.equal(userLayer.target, "user");

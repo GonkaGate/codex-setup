@@ -1,4 +1,4 @@
-import { copyFile, lstat, readFile, rm, stat } from "node:fs/promises";
+import { copyFile, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import writeFileAtomic from "write-file-atomic";
 import {
@@ -7,7 +7,10 @@ import {
   OWNER_READ_WRITE_MODE,
   OWNER_READ_WRITE_EXECUTE_MODE,
 } from "./file-permissions.js";
-import { isMissingFileError } from "./error-codes.js";
+import {
+  assertSafeManagedWriteTarget,
+  inspectOptionalPathTarget,
+} from "./path-target-safety.js";
 
 export interface ManagedWriteOptions {
   backupFactory?: (filePath: string, mode?: number) => Promise<string>;
@@ -112,48 +115,26 @@ function contentsAreEqual(
 async function readManagedTextFileState(
   filePath: string,
 ): Promise<ManagedTextFileState> {
-  try {
-    const targetStats = await lstat(filePath);
-    assertSafeManagedFileTarget(filePath, targetStats);
+  const target = await inspectOptionalPathTarget(filePath);
 
+  if (!target.exists) {
     return {
-      exists: true,
-      text: await readFile(filePath, "utf8"),
+      exists: false,
+      text: "",
     };
-  } catch (error) {
-    if (isMissingFileError(error)) {
-      return {
-        exists: false,
-        text: "",
-      };
-    }
-
-    throw error;
-  }
-}
-
-function assertSafeManagedFileTarget(
-  filePath: string,
-  targetStats: Awaited<ReturnType<typeof lstat>>,
-): void {
-  if (targetStats.isDirectory()) {
-    throw new Error(`Refusing to overwrite directory ${filePath}.`);
   }
 
-  if (targetStats.isSymbolicLink()) {
-    throw new Error(`Refusing to overwrite symlink ${filePath}.`);
-  }
+  assertSafeManagedWriteTarget(filePath, target);
+  return {
+    exists: true,
+    text: await readFile(filePath, "utf8"),
+  };
 }
 
 async function assertSafeRollbackTarget(filePath: string): Promise<void> {
-  try {
-    const targetStats = await lstat(filePath);
-    assertSafeManagedFileTarget(filePath, targetStats);
-  } catch (error) {
-    if (isMissingFileError(error)) {
-      return;
-    }
+  const target = await inspectOptionalPathTarget(filePath);
 
-    throw error;
+  if (target.exists) {
+    assertSafeManagedWriteTarget(filePath, target);
   }
 }

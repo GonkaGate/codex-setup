@@ -1,8 +1,9 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildBackupGlob } from "./backup.js";
 import type { LocalProjectConfigExcludeTarget } from "./local-project-config.js";
-import { describeUnknownError, isMissingFileError } from "./error-codes.js";
+import { describeUnknownError } from "./error-codes.js";
+import { readOptionalTextFile } from "./optional-text-file.js";
 
 export async function ensureLocalProjectConfigExcluded(
   excludeTarget: LocalProjectConfigExcludeTarget | undefined,
@@ -55,12 +56,8 @@ async function ensureRepoPathExcluded(
 
 async function readOptionalFile(filePath: string): Promise<string> {
   try {
-    return await readFile(filePath, "utf8");
+    return (await readOptionalTextFile(filePath)) ?? "";
   } catch (error) {
-    if (isMissingFileError(error)) {
-      return "";
-    }
-
     throw new Error(
       `Failed to read ${filePath}: ${describeUnknownError(error)}`,
     );

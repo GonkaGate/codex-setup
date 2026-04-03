@@ -47,9 +47,7 @@ test("user scope writes GonkaGate provider, token helper, and curated catalog", 
   expectGonkagateProviderConfig(userConfig, {
     codexHome: scenario.codexHome,
     configLabel: "userConfig",
-    helperPath: outcome.helperPath,
-    nodeExecutable: process.execPath,
-    platform: process.platform,
+    tokenCommand: scenario.tokenCommand,
   });
 
   assert.equal(
@@ -113,9 +111,7 @@ test("local scope keeps activation in the project file and trusts the repo root"
   expectGonkagateProviderConfig(userConfig, {
     codexHome: scenario.codexHome,
     configLabel: "userConfig",
-    helperPath: outcome.helperPath,
-    nodeExecutable: process.execPath,
-    platform: process.platform,
+    tokenCommand: scenario.tokenCommand,
   });
 
   const projectConfig = parseTomlTable(

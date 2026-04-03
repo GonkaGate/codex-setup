@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
 import TOML from "@iarna/toml";
-import { describeUnknownError, isMissingFileError } from "./error-codes.js";
+import { describeUnknownError } from "./error-codes.js";
+import { readOptionalTextFile } from "./optional-text-file.js";
 
 export type TomlTable = Parameters<typeof TOML.stringify>[0];
 export type TomlValue = TomlTable[string];
@@ -24,7 +24,17 @@ export async function loadTomlConfig(
   filePath: string,
 ): Promise<LoadedTomlConfig> {
   try {
-    const text = await readFile(filePath, "utf8");
+    const text = await readOptionalTextFile(filePath);
+
+    if (text === undefined) {
+      return {
+        exists: false,
+        filePath,
+        settings: {},
+        text: "",
+      };
+    }
+
     const settings: TomlTable = TOML.parse(text);
 
     return {
@@ -34,15 +44,6 @@ export async function loadTomlConfig(
       text,
     };
   } catch (error) {
-    if (isMissingFileError(error)) {
-      return {
-        exists: false,
-        filePath,
-        settings: {},
-        text: "",
-      };
-    }
-
     throw new Error(
       `Failed to read ${filePath} as TOML: ${describeUnknownError(error)}`,
     );

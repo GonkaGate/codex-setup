@@ -22,8 +22,6 @@ import {
 import {
   TEST_CODEX_HOME,
   TEST_INSTALL_PATHS,
-  TEST_NODE_EXECUTABLE,
-  TEST_PLATFORM,
   TEST_TOKEN_COMMAND,
   createLoadedTomlConfig,
 } from "./helpers/install-fixtures.js";
@@ -61,9 +59,7 @@ test("planInstallConfigWrites keeps user scope config ownership centralized", as
   expectGonkagateProviderConfig(userLayer.config, {
     codexHome: TEST_CODEX_HOME,
     configLabel: "userLayer.config",
-    helperPath: TEST_TOKEN_COMMAND.helperFilePath,
-    nodeExecutable: TEST_NODE_EXECUTABLE,
-    platform: TEST_PLATFORM,
+    tokenCommand: TEST_TOKEN_COMMAND,
   });
   const analyticsConfig = expectTomlTable(
     userLayer.config.analytics,
@@ -116,9 +112,7 @@ test("planInstallConfigWrites splits local scope across user and project layers"
   expectGonkagateProviderConfig(userLayer.config, {
     codexHome: TEST_CODEX_HOME,
     configLabel: "userLayer.config",
-    helperPath: TEST_TOKEN_COMMAND.helperFilePath,
-    nodeExecutable: TEST_NODE_EXECUTABLE,
-    platform: TEST_PLATFORM,
+    tokenCommand: TEST_TOKEN_COMMAND,
   });
   expectTrustedProjectConfig(
     userLayer.config,

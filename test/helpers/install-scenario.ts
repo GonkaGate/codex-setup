@@ -1,8 +1,5 @@
 import { DEFAULT_MODEL } from "../../src/constants/models.js";
-import {
-  buildInstallArtifacts,
-  type InstallArtifacts,
-} from "../../src/install/install-artifacts.js";
+import { type InstallArtifacts } from "../../src/install/install-artifacts.js";
 import {
   createInstallUseCaseDependencies,
   runInstallUseCase,
@@ -13,6 +10,9 @@ import {
 import {
   DEFAULT_TEST_API_KEY,
   DEFAULT_TEST_CODEX_VERSION,
+  createTestCodexAvailability,
+  createTestCodexEnvironment,
+  createTestInstallArtifacts,
 } from "./install-fixtures.js";
 import {
   createTempWorkspace,
@@ -58,14 +58,11 @@ export interface InstallScenario {
 function createInstallDependencyOverrides(options: InstallDependencyOptions) {
   return {
     input: {
-      checkCodexAvailable: () => ({
-        command: "codex",
-        version: options.codexVersion ?? DEFAULT_TEST_CODEX_VERSION,
-      }),
-      environment: {
-        ...process.env,
-        CODEX_HOME: options.codexHome,
-      },
+      checkCodexAvailable: () =>
+        createTestCodexAvailability(
+          options.codexVersion ?? DEFAULT_TEST_CODEX_VERSION,
+        ),
+      environment: createTestCodexEnvironment(options.codexHome, process.env),
       promptForApiKey: async () => options.apiKey ?? DEFAULT_TEST_API_KEY,
       promptForModel: async () => DEFAULT_MODEL,
       promptForScope: async () => options.promptScope,
@@ -81,12 +78,9 @@ export async function createInstallScenario(
 ): Promise<InstallScenario> {
   const workspace = await createTempWorkspace(`codex-setup-${name}-workspace`);
   const codexHome = await createTempWorkspace(`codex-setup-${name}-home`);
-  const environment = {
-    ...process.env,
-    CODEX_HOME: codexHome,
-  };
-  const installArtifacts = buildInstallArtifacts({
-    environment,
+  const installArtifacts = createTestInstallArtifacts({
+    codexHome,
+    environment: process.env,
     nodeExecutable: process.execPath,
     platform: process.platform,
     projectRoot: workspace,

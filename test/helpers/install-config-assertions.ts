@@ -12,6 +12,7 @@ import {
   expectTomlStringArray,
   expectTomlTable,
 } from "./structured-data.js";
+import type { TokenCommandConfig } from "../../src/install/token-helper.js";
 
 interface ActivationConfigExpectation {
   configLabel?: string;
@@ -22,9 +23,7 @@ interface ActivationConfigExpectation {
 interface ProviderConfigExpectation {
   codexHome: string;
   configLabel?: string;
-  helperPath: string;
-  nodeExecutable: string;
-  platform: NodeJS.Platform;
+  tokenCommand: TokenCommandConfig;
 }
 
 export function expectGonkagateActivationConfig(
@@ -94,23 +93,19 @@ export function expectGonkagateProviderConfig(
     expectTomlString(auth.cwd, `${configLabel}.provider.auth.cwd`),
     expectation.codexHome,
   );
+  assert.equal(
+    expectTomlString(auth.command, `${configLabel}.provider.auth.command`),
+    expectation.tokenCommand.command,
+  );
 
-  if (expectation.platform === "win32") {
-    assert.equal(
-      expectTomlString(auth.command, `${configLabel}.provider.auth.command`),
-      expectation.nodeExecutable,
-    );
+  if (expectation.tokenCommand.args.length > 0) {
     assert.deepEqual(
       expectTomlStringArray(auth.args, `${configLabel}.provider.auth.args`),
-      [expectation.helperPath],
+      expectation.tokenCommand.args,
     );
     return;
   }
 
-  assert.equal(
-    expectTomlString(auth.command, `${configLabel}.provider.auth.command`),
-    expectation.helperPath,
-  );
   assert.equal(auth.args, undefined);
 }
 

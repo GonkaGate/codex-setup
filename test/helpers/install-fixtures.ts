@@ -10,6 +10,15 @@ import {
   createLocalScopeDetails,
   createUserScopeDetails,
 } from "../../src/install/install-scope.js";
+import {
+  createInstallSummary,
+  type PreparedInstallContext,
+} from "../../src/install/install-state.js";
+import {
+  type InstallScope,
+  type InstallPaths,
+} from "../../src/install/settings-paths.js";
+import type { TokenCommandConfig } from "../../src/install/token-helper.js";
 import type { InstallOutcome } from "../../src/install/install-use-case.js";
 import type {
   LoadedTomlConfig,
@@ -23,14 +32,68 @@ export const TEST_CODEX_HOME = "/Users/test/.codex";
 export const TEST_NODE_EXECUTABLE = "/usr/bin/node";
 export const TEST_PLATFORM = "linux";
 
-export const TEST_INSTALL_ARTIFACTS: InstallArtifacts = buildInstallArtifacts({
-  environment: {
-    CODEX_HOME: TEST_CODEX_HOME,
-  },
-  nodeExecutable: TEST_NODE_EXECUTABLE,
-  platform: TEST_PLATFORM,
-  projectRoot: TEST_PROJECT_ROOT,
-});
+interface TestInstallArtifactsOptions {
+  codexHome?: string;
+  environment?: NodeJS.ProcessEnv;
+  nodeExecutable?: string;
+  platform?: NodeJS.Platform;
+  projectRoot?: string;
+}
+
+interface CommonPreparedInstallContextFields {
+  codex: PreparedInstallContext["codex"];
+  installPaths: InstallPaths;
+  requestedScope: InstallScope;
+  selectedModel: SupportedModel;
+  tokenCommand: TokenCommandConfig;
+}
+
+type UserPreparedInstallContext = Extract<
+  PreparedInstallContext,
+  { finalScope: "user" }
+>;
+type LocalPreparedInstallContext = Extract<
+  PreparedInstallContext,
+  { finalScope: "local" }
+>;
+
+type UserInstallOutcome = Extract<InstallOutcome, { finalScope: "user" }>;
+type LocalInstallOutcome = Extract<InstallOutcome, { finalScope: "local" }>;
+
+export function createTestCodexEnvironment(
+  codexHome: string,
+  environment: NodeJS.ProcessEnv = {},
+): NodeJS.ProcessEnv {
+  return {
+    ...environment,
+    CODEX_HOME: codexHome,
+  };
+}
+
+export function createTestCodexAvailability(
+  version = DEFAULT_TEST_CODEX_VERSION,
+): UserInstallOutcome["codex"] {
+  return {
+    command: "codex",
+    version,
+  };
+}
+
+export function createTestInstallArtifacts(
+  options: TestInstallArtifactsOptions = {},
+): InstallArtifacts {
+  const codexHome = options.codexHome ?? TEST_CODEX_HOME;
+
+  return buildInstallArtifacts({
+    environment: createTestCodexEnvironment(codexHome, options.environment),
+    nodeExecutable: options.nodeExecutable ?? TEST_NODE_EXECUTABLE,
+    platform: options.platform ?? TEST_PLATFORM,
+    projectRoot: options.projectRoot ?? TEST_PROJECT_ROOT,
+  });
+}
+
+export const TEST_INSTALL_ARTIFACTS: InstallArtifacts =
+  createTestInstallArtifacts();
 
 export const TEST_INSTALL_PATHS = TEST_INSTALL_ARTIFACTS.installPaths;
 
@@ -40,34 +103,58 @@ export const TEST_LOCAL_SCOPE_PATHS = {
 } as const;
 
 export const TEST_TOKEN_COMMAND = TEST_INSTALL_ARTIFACTS.tokenCommand;
-type UserInstallOutcome = Extract<InstallOutcome, { finalScope: "user" }>;
-type LocalInstallOutcome = Extract<InstallOutcome, { finalScope: "local" }>;
 
-interface CommonInstallOutcomeFields {
-  codex: {
-    command: string;
-    version: string;
+function createCommonPreparedInstallContextFields(
+  requestedScope: InstallScope,
+  overrides: Partial<CommonPreparedInstallContextFields> = {},
+): CommonPreparedInstallContextFields {
+  return {
+    codex: createTestCodexAvailability(),
+    installPaths: TEST_INSTALL_PATHS,
+    requestedScope,
+    selectedModel: DEFAULT_MODEL,
+    tokenCommand: TEST_TOKEN_COMMAND,
+    ...overrides,
   };
-  helperPath: string;
-  modelCatalogPath: string;
-  projectRoot: string;
-  selectedModel: SupportedModel;
-  tokenPath: string;
-  userConfigPath: string;
 }
 
-function createCommonInstallOutcomeFields(): CommonInstallOutcomeFields {
+function createUserPreparedInstallContext(
+  overrides: Omit<Partial<UserInstallOutcome>, "writes"> = {},
+): UserPreparedInstallContext {
   return {
-    codex: {
-      command: "codex",
-      version: DEFAULT_TEST_CODEX_VERSION,
-    },
-    helperPath: TEST_TOKEN_COMMAND.helperFilePath,
-    modelCatalogPath: TEST_INSTALL_PATHS.modelCatalogPath,
-    projectRoot: TEST_INSTALL_PATHS.projectRoot,
-    selectedModel: DEFAULT_MODEL,
-    tokenPath: TEST_INSTALL_PATHS.tokenPath,
-    userConfigPath: TEST_INSTALL_PATHS.userConfigPath,
+    ...createCommonPreparedInstallContextFields(
+      overrides.requestedScope ?? "user",
+      {
+        ...(overrides.codex ? { codex: overrides.codex } : {}),
+        ...(overrides.requestedScope
+          ? { requestedScope: overrides.requestedScope }
+          : {}),
+        ...(overrides.selectedModel
+          ? { selectedModel: overrides.selectedModel }
+          : {}),
+      },
+    ),
+    ...createUserScopeDetails(overrides.switchedToUserScope ?? false),
+  };
+}
+
+function createLocalPreparedInstallContext(
+  overrides: Omit<Partial<LocalInstallOutcome>, "writes"> = {},
+): LocalPreparedInstallContext {
+  return {
+    ...createCommonPreparedInstallContextFields(
+      overrides.requestedScope ?? "local",
+      {
+        ...(overrides.codex ? { codex: overrides.codex } : {}),
+        ...(overrides.requestedScope
+          ? { requestedScope: overrides.requestedScope }
+          : {}),
+        ...(overrides.selectedModel
+          ? { selectedModel: overrides.selectedModel }
+          : {}),
+      },
+    ),
+    ...createLocalScopeDetails(TEST_LOCAL_SCOPE_PATHS),
   };
 }
 
@@ -85,23 +172,26 @@ export function createTestInstallOutcome(
 ): InstallOutcome {
   if (finalScope === "user") {
     const userOverrides = overrides as Partial<UserInstallOutcome>;
+    const { writes = [], ...summaryOverrides } = userOverrides;
 
     return {
-      ...createUserScopeDetails(userOverrides.switchedToUserScope ?? false),
-      ...createCommonInstallOutcomeFields(),
-      requestedScope: "user",
-      writes: [],
-      ...userOverrides,
+      ...createInstallSummary(
+        createUserPreparedInstallContext(summaryOverrides),
+      ),
+      ...summaryOverrides,
+      writes,
     };
   }
 
   const localOverrides = overrides as Partial<LocalInstallOutcome>;
+  const { writes = [], ...summaryOverrides } = localOverrides;
+
   return {
-    ...createLocalScopeDetails(TEST_LOCAL_SCOPE_PATHS),
-    ...createCommonInstallOutcomeFields(),
-    requestedScope: "local",
-    writes: [],
-    ...localOverrides,
+    ...createInstallSummary(
+      createLocalPreparedInstallContext(summaryOverrides),
+    ),
+    ...summaryOverrides,
+    writes,
   };
 }
 

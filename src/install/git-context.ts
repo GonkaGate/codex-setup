@@ -1,6 +1,7 @@
-import { readFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import { isMissingFileError } from "./error-codes.js";
+import { readOptionalTextFile } from "./optional-text-file.js";
 
 export interface GitContext {
   gitDir: string;
@@ -64,7 +65,12 @@ async function resolveGitDir(
     }
 
     if (gitMarkerStats.isFile()) {
-      const markerContent = await readFile(gitMarkerPath, "utf8");
+      const markerContent = await readOptionalTextFile(gitMarkerPath);
+
+      if (markerContent === undefined) {
+        return null;
+      }
+
       const match = /^gitdir:\s*(.+)\s*$/m.exec(markerContent);
 
       if (!match) {

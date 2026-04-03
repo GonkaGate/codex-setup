@@ -13,19 +13,33 @@ export function initGitRepo(workspace: string): void {
   });
 }
 
+export async function createGitWorkspace(prefix: string): Promise<string> {
+  const workspace = await createTempWorkspace(prefix);
+  initGitRepo(workspace);
+  return workspace;
+}
+
 export async function trackLocalProjectConfig(
   workspace: string,
   content = 'model_provider = "openai"\n',
 ): Promise<void> {
-  await mkdir(path.join(workspace, ".codex"), {
-    recursive: true,
-  });
-  await writeFile(
-    path.join(workspace, ".codex", "config.toml"),
-    content,
-    "utf8",
-  );
+  await writeLocalProjectConfig(workspace, content);
   execFileSync("git", ["add", ".codex/config.toml"], {
     cwd: workspace,
   });
+}
+
+export async function writeLocalProjectConfig(
+  workspace: string,
+  content = 'model_provider = "openai"\n',
+): Promise<string> {
+  const configDirectory = path.join(workspace, ".codex");
+  const configPath = path.join(configDirectory, "config.toml");
+
+  await mkdir(configDirectory, {
+    recursive: true,
+  });
+  await writeFile(configPath, content, "utf8");
+
+  return configPath;
 }

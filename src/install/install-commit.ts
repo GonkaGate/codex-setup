@@ -63,8 +63,7 @@ function createManagedWriteOptions(
 ): ManagedWriteOptions {
   return {
     backupFactory: createBackupForWrite,
-    contentComparator: plannedWrite.contentComparator,
-    mode: plannedWrite.mode,
+    ...plannedWrite.writeOptions,
   };
 }
 

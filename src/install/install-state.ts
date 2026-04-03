@@ -17,21 +17,14 @@ import {
   type UserScopeResolution,
   type UserScopeDetails,
 } from "./install-scope.js";
-import {
-  resolveInstallPaths,
-  resolveProjectRoot,
-  type InstallPaths,
-  type InstallScope,
-} from "./settings-paths.js";
-import {
-  createTokenCommandConfig,
-  type TokenCommandConfig,
-} from "./token-helper.js";
+import { type InstallPaths, type InstallScope } from "./settings-paths.js";
+import { type TokenCommandConfig } from "./token-helper.js";
 import type {
   InstallInputDependencies,
   InstallPlanningDependencies,
 } from "./install-dependencies.js";
 import type { InstallRequest } from "./install-use-case.js";
+import { resolveInstallArtifacts } from "./install-artifacts.js";
 
 interface InstallSummaryBase {
   codex: CodexAvailability;
@@ -110,21 +103,17 @@ async function resolvePreparedInstallContext(
   planningDependencies: InstallPlanningDependencies,
 ): Promise<PreparedInstallContext> {
   const resolvedInputs = await collectInstallInputs(request, inputDependencies);
-  const installPaths = await resolveInstallPathsForRequest(
-    request,
-    inputDependencies.environment,
-  );
+  const { installPaths, tokenCommand } = await resolveInstallArtifacts({
+    cwd: request.cwd,
+    environment: inputDependencies.environment,
+    nodeExecutable: planningDependencies.nodeExecutable,
+    platform: planningDependencies.platform,
+  });
   const scopeResolution = await resolveRequestedInstallScope(
     installPaths,
     resolvedInputs.requestedScope,
     inputDependencies,
   );
-  const tokenCommand = createTokenCommandConfig({
-    codexHome: installPaths.codexHome,
-    nodeExecutable: planningDependencies.nodeExecutable,
-    platform: planningDependencies.platform,
-    tokenPath: installPaths.tokenPath,
-  });
 
   return createPreparedInstallContext(
     resolvedInputs,
@@ -132,18 +121,6 @@ async function resolvePreparedInstallContext(
     scopeResolution,
     tokenCommand,
   );
-}
-
-async function resolveInstallPathsForRequest(
-  request: InstallRequest,
-  environment: NodeJS.ProcessEnv,
-): Promise<InstallPaths> {
-  const projectRoot = await resolveProjectRoot(request.cwd);
-
-  return resolveInstallPaths({
-    environment,
-    projectRoot,
-  });
 }
 
 async function resolveRequestedInstallScope(

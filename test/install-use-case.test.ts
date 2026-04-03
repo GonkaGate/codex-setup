@@ -2,14 +2,15 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import {
-  GONKAGATE_BASE_URL,
-  GONKAGATE_PROVIDER_ID,
-} from "../src/constants/gateway.js";
 import { DEFAULT_MODEL } from "../src/constants/models.js";
 import { buildBackupGlob } from "../src/install/backup.js";
 import { InstallCommitError } from "../src/install/install-errors.js";
 import { createInstallScenario } from "./helpers/install-scenario.js";
+import {
+  expectGonkagateActivationConfig,
+  expectGonkagateProviderConfig,
+  expectTrustedProjectConfig,
+} from "./helpers/install-config-assertions.js";
 import {
   DEFAULT_TEST_API_KEY,
   createLoadedTomlConfig,
@@ -19,13 +20,10 @@ import {
   expectJsonObject,
   expectJsonString,
   expectTomlBoolean,
-  expectTomlString,
-  expectTomlStringArray,
   expectTomlTable,
   parseJsonObject,
   parseTomlTable,
 } from "./helpers/structured-data.js";
-import { initGitRepo, trackLocalProjectConfig } from "./helpers/workspace.js";
 
 test("user scope writes GonkaGate provider, token helper, and curated catalog", async () => {
   const scenario = await createInstallScenario("user", {
@@ -41,69 +39,17 @@ test("user scope writes GonkaGate provider, token helper, and curated catalog", 
   const userConfig = parseTomlTable(
     await readFile(outcome.userConfigPath, "utf8"),
   );
-  assert.equal(
-    expectTomlString(userConfig.model_provider, "userConfig.model_provider"),
-    GONKAGATE_PROVIDER_ID,
-  );
-  assert.equal(
-    expectTomlString(userConfig.model, "userConfig.model"),
-    DEFAULT_MODEL.modelId,
-  );
-  assert.equal(
-    expectTomlString(
-      userConfig.model_catalog_json,
-      "userConfig.model_catalog_json",
-    ),
-    outcome.modelCatalogPath,
-  );
-
-  const providers = expectTomlTable(
-    userConfig.model_providers,
-    "userConfig.model_providers",
-  );
-  const provider = expectTomlTable(
-    providers[GONKAGATE_PROVIDER_ID],
-    `userConfig.model_providers.${GONKAGATE_PROVIDER_ID}`,
-  );
-  const auth = expectTomlTable(
-    provider.auth,
-    "userConfig.model_providers.gonkagate.auth",
-  );
-  assert.equal(
-    expectTomlString(provider.base_url, "provider.base_url"),
-    GONKAGATE_BASE_URL,
-  );
-  assert.equal(
-    expectTomlString(provider.wire_api, "provider.wire_api"),
-    "responses",
-  );
-  assert.equal(
-    expectTomlBoolean(
-      provider.supports_websockets,
-      "provider.supports_websockets",
-    ),
-    false,
-  );
-  assert.equal(
-    expectTomlString(auth.cwd, "provider.auth.cwd"),
-    scenario.codexHome,
-  );
-
-  if (process.platform === "win32") {
-    assert.equal(
-      expectTomlString(auth.command, "provider.auth.command"),
-      process.execPath,
-    );
-    assert.deepEqual(expectTomlStringArray(auth.args, "provider.auth.args"), [
-      outcome.helperPath,
-    ]);
-  } else {
-    assert.equal(
-      expectTomlString(auth.command, "provider.auth.command"),
-      outcome.helperPath,
-    );
-    assert.equal(auth.args, undefined);
-  }
+  expectGonkagateActivationConfig(userConfig, {
+    configLabel: "userConfig",
+    modelCatalogPath: outcome.modelCatalogPath,
+  });
+  expectGonkagateProviderConfig(userConfig, {
+    codexHome: scenario.codexHome,
+    configLabel: "userConfig",
+    helperPath: outcome.helperPath,
+    nodeExecutable: process.execPath,
+    platform: process.platform,
+  });
 
   assert.equal(
     (await readFile(outcome.tokenPath, "utf8")).trim(),
@@ -146,7 +92,7 @@ test("local scope keeps activation in the project file and trusts the repo root"
   const scenario = await createInstallScenario("local", {
     scope: "local",
   });
-  initGitRepo(scenario.workspace);
+  scenario.initGitRepo();
 
   const outcome = await scenario.run();
 
@@ -162,38 +108,22 @@ test("local scope keeps activation in the project file and trusts the repo root"
   );
   assert.equal(userConfig.model_provider, undefined);
   assert.equal(userConfig.model, undefined);
-
-  const projects = expectTomlTable(userConfig.projects, "userConfig.projects");
-  const trustedProject = expectTomlTable(
-    projects[scenario.workspace],
-    `userConfig.projects.${scenario.workspace}`,
-  );
-  assert.equal(
-    expectTomlString(trustedProject.trust_level, "trustedProject.trust_level"),
-    "trusted",
-  );
+  expectTrustedProjectConfig(userConfig, scenario.workspace, "userConfig");
+  expectGonkagateProviderConfig(userConfig, {
+    codexHome: scenario.codexHome,
+    configLabel: "userConfig",
+    helperPath: outcome.helperPath,
+    nodeExecutable: process.execPath,
+    platform: process.platform,
+  });
 
   const projectConfig = parseTomlTable(
     await readFile(outcome.projectConfigPath, "utf8"),
   );
-  assert.equal(
-    expectTomlString(
-      projectConfig.model_provider,
-      "projectConfig.model_provider",
-    ),
-    GONKAGATE_PROVIDER_ID,
-  );
-  assert.equal(
-    expectTomlString(projectConfig.model, "projectConfig.model"),
-    DEFAULT_MODEL.modelId,
-  );
-  assert.equal(
-    expectTomlString(
-      projectConfig.model_catalog_json,
-      "projectConfig.model_catalog_json",
-    ),
-    outcome.modelCatalogPath,
-  );
+  expectGonkagateActivationConfig(projectConfig, {
+    configLabel: "projectConfig",
+    modelCatalogPath: outcome.modelCatalogPath,
+  });
 
   const excludePath = path.join(scenario.workspace, ".git", "info", "exclude");
   const excludeText = await readFile(excludePath, "utf8");
@@ -209,8 +139,8 @@ test("tracked local config switches to user scope when requested", async () => {
     scope: "local",
     trackedLocalAction: "user",
   });
-  initGitRepo(scenario.workspace);
-  await trackLocalProjectConfig(scenario.workspace);
+  scenario.initGitRepo();
+  await scenario.trackLocalProjectConfig();
 
   const outcome = await scenario.run();
 
@@ -228,8 +158,8 @@ test("tracked local config can cancel without touching config files or git exclu
     scope: "local",
     trackedLocalAction: "cancel",
   });
-  initGitRepo(scenario.workspace);
-  await trackLocalProjectConfig(scenario.workspace);
+  scenario.initGitRepo();
+  await scenario.trackLocalProjectConfig();
 
   const excludePath = path.join(scenario.workspace, ".git", "info", "exclude");
   const initialExcludeText = await readFile(excludePath, "utf8");
@@ -283,10 +213,10 @@ test("existing user config and token files are preserved via backups before over
   const userConfig = parseTomlTable(
     await readFile(outcome.userConfigPath, "utf8"),
   );
-  assert.equal(
-    expectTomlString(userConfig.model, "userConfig.model"),
-    DEFAULT_MODEL.modelId,
-  );
+  expectGonkagateActivationConfig(userConfig, {
+    configLabel: "userConfig",
+    modelCatalogPath: outcome.modelCatalogPath,
+  });
   const analyticsConfig = expectTomlTable(
     userConfig.analytics,
     "userConfig.analytics",
@@ -305,7 +235,7 @@ test("prepare failures stop before repo exclusion and managed file writes begin"
   const scenario = await createInstallScenario("prepare", {
     scope: "local",
   });
-  initGitRepo(scenario.workspace);
+  scenario.initGitRepo();
 
   const excludePath = path.join(scenario.workspace, ".git", "info", "exclude");
   const initialExcludeText = await readFile(excludePath, "utf8");
@@ -429,7 +359,7 @@ test("local scope resolves the git repo root even from nested directories", asyn
   await mkdir(nestedDirectory, {
     recursive: true,
   });
-  initGitRepo(scenario.workspace);
+  scenario.initGitRepo();
 
   const outcome = await scenario.run({
     cwd: nestedDirectory,

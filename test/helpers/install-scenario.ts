@@ -1,12 +1,8 @@
 import { DEFAULT_MODEL } from "../../src/constants/models.js";
 import {
-  resolveInstallPaths,
-  type InstallPaths,
-} from "../../src/install/settings-paths.js";
-import {
-  createTokenCommandConfig,
-  type TokenCommandConfig,
-} from "../../src/install/token-helper.js";
+  buildInstallArtifacts,
+  type InstallArtifacts,
+} from "../../src/install/install-artifacts.js";
 import {
   createInstallUseCaseDependencies,
   runInstallUseCase,
@@ -18,7 +14,11 @@ import {
   DEFAULT_TEST_API_KEY,
   DEFAULT_TEST_CODEX_VERSION,
 } from "./install-fixtures.js";
-import { createTempWorkspace } from "./workspace.js";
+import {
+  createTempWorkspace,
+  initGitRepo,
+  trackLocalProjectConfig,
+} from "./workspace.js";
 
 interface InstallDependencyOptions {
   apiKey?: string;
@@ -46,9 +46,12 @@ export interface InstallScenario {
   createDependencies: (
     overrides?: InstallUseCaseDependencyOverrides,
   ) => InstallUseCaseDependencies;
-  installPaths: InstallPaths;
+  initGitRepo: () => void;
+  installArtifacts: InstallArtifacts;
+  installPaths: InstallArtifacts["installPaths"];
   run: (options?: InstallScenarioRunOptions) => Promise<InstallOutcome>;
-  tokenCommand: TokenCommandConfig;
+  trackLocalProjectConfig: (content?: string) => Promise<void>;
+  tokenCommand: InstallArtifacts["tokenCommand"];
   workspace: string;
 }
 
@@ -82,16 +85,13 @@ export async function createInstallScenario(
     ...process.env,
     CODEX_HOME: codexHome,
   };
-  const installPaths = resolveInstallPaths({
+  const installArtifacts = buildInstallArtifacts({
     environment,
-    projectRoot: workspace,
-  });
-  const tokenCommand = createTokenCommandConfig({
-    codexHome: installPaths.codexHome,
     nodeExecutable: process.execPath,
     platform: process.platform,
-    tokenPath: installPaths.tokenPath,
+    projectRoot: workspace,
   });
+  const { installPaths, tokenCommand } = installArtifacts;
 
   const createDependencies = (
     overrides: InstallUseCaseDependencyOverrides = {},
@@ -127,8 +127,15 @@ export async function createInstallScenario(
   return {
     codexHome,
     createDependencies,
+    initGitRepo: () => {
+      initGitRepo(workspace);
+    },
+    installArtifacts,
     installPaths,
     run,
+    trackLocalProjectConfig: async (content?: string) => {
+      await trackLocalProjectConfig(workspace, content);
+    },
     tokenCommand,
     workspace,
   };

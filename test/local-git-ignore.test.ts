@@ -5,8 +5,8 @@ import test from "node:test";
 import { ensureLocalProjectConfigExcluded } from "../src/install/local-git-ignore.js";
 import { inspectLocalProjectConfig } from "../src/install/local-project-config.js";
 import {
+  createGitWorkspace,
   createTempWorkspace,
-  initGitRepo,
   trackLocalProjectConfig,
 } from "./helpers/workspace.js";
 
@@ -23,8 +23,7 @@ test("inspectLocalProjectConfig reports when the project is outside git", async 
 });
 
 test("inspectLocalProjectConfig classifies tracked and untracked repo configs", async () => {
-  const workspace = await createTempWorkspace("codex-setup-git-targets");
-  initGitRepo(workspace);
+  const workspace = await createGitWorkspace("codex-setup-git-targets");
 
   const configPath = path.join(workspace, ".codex", "config.toml");
   let configInspection = await inspectLocalProjectConfig(configPath);
@@ -37,8 +36,7 @@ test("inspectLocalProjectConfig classifies tracked and untracked repo configs", 
 });
 
 test("ensureLocalProjectConfigExcluded surfaces exclude read errors", async () => {
-  const workspace = await createTempWorkspace("codex-setup-git-exclude");
-  initGitRepo(workspace);
+  const workspace = await createGitWorkspace("codex-setup-git-exclude");
 
   const excludePath = path.join(workspace, ".git", "info", "exclude");
   await rm(excludePath, {
@@ -69,16 +67,17 @@ test("ensureLocalProjectConfigExcluded is a no-op for tracked and outside-repo c
   assert.equal(outsideInspection.kind, "outside_repo");
   await assert.doesNotReject(() => ensureLocalProjectConfigExcluded(undefined));
 
-  const workspace = await createTempWorkspace("codex-setup-git-exclude-noop");
-  initGitRepo(workspace);
-  await trackLocalProjectConfig(workspace);
+  const trackedWorkspace = await createGitWorkspace(
+    "codex-setup-git-exclude-noop",
+  );
+  await trackLocalProjectConfig(trackedWorkspace);
 
   const trackedInspection = await inspectLocalProjectConfig(
-    path.join(workspace, ".codex", "config.toml"),
+    path.join(trackedWorkspace, ".codex", "config.toml"),
   );
   assert.equal(trackedInspection.kind, "tracked");
 
-  const excludePath = path.join(workspace, ".git", "info", "exclude");
+  const excludePath = path.join(trackedWorkspace, ".git", "info", "exclude");
   await writeFile(excludePath, "# existing\n", "utf8");
   const initialExcludeText = await readFile(excludePath, "utf8");
 
@@ -92,8 +91,7 @@ test("inspectLocalProjectConfig rejects a symlinked .codex directory", async (t)
     return;
   }
 
-  const workspace = await createTempWorkspace("codex-setup-symlink-dir");
-  initGitRepo(workspace);
+  const workspace = await createGitWorkspace("codex-setup-symlink-dir");
 
   const realCodexDirectory = path.join(workspace, "real-codex");
   await mkdir(realCodexDirectory, {
@@ -114,8 +112,7 @@ test("inspectLocalProjectConfig rejects a symlinked config file", async (t) => {
     return;
   }
 
-  const workspace = await createTempWorkspace("codex-setup-symlink-file");
-  initGitRepo(workspace);
+  const workspace = await createGitWorkspace("codex-setup-symlink-file");
 
   const configDirectory = path.join(workspace, ".codex");
   const realConfigPath = path.join(workspace, "real-config.toml");

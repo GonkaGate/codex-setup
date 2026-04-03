@@ -14,7 +14,7 @@ import {
   type LoadedTomlConfig,
 } from "./toml-config.js";
 import type { TokenCommandConfig } from "./token-helper.js";
-import type { ManagedTextComparator } from "./write-managed-file.js";
+import type { ManagedWriteOptions } from "./write-managed-file.js";
 
 export type ManagedWriteKind =
   | "token"
@@ -27,11 +27,12 @@ export type InstallWritePhaseName = "catalog" | "config" | "credentials";
 
 export interface ManagedWritePlan {
   content: string;
-  contentComparator?: ManagedTextComparator;
   filePath: string;
   kind: ManagedWriteKind;
-  mode: number;
+  writeOptions: PlannedManagedWriteOptions;
 }
+
+type PlannedManagedWriteOptions = Omit<ManagedWriteOptions, "backupFactory">;
 
 export interface InstallWritePhase {
   name: InstallWritePhaseName;
@@ -81,13 +82,17 @@ function planCredentialWritePhase(
         "token",
         input.installPaths.tokenPath,
         `${input.apiKey}\n`,
-        OWNER_READ_WRITE_MODE,
+        {
+          mode: OWNER_READ_WRITE_MODE,
+        },
       ),
       createWritePlan(
         "token_helper",
         input.tokenCommand.helperFilePath,
         input.tokenCommand.content,
-        input.tokenCommand.fileMode,
+        {
+          mode: input.tokenCommand.fileMode,
+        },
       ),
     ],
   };
@@ -103,7 +108,9 @@ function planCatalogWritePhase(
         "model_catalog",
         input.installPaths.modelCatalogPath,
         `${JSON.stringify(createCuratedModelCatalog(), null, 2)}\n`,
-        OWNER_READ_WRITE_MODE,
+        {
+          mode: OWNER_READ_WRITE_MODE,
+        },
       ),
     ],
   };
@@ -135,8 +142,10 @@ function toManagedConfigWrite(
     CONFIG_FILE_KIND_BY_TARGET[configWrite.target],
     configWrite.filePath,
     managedTomlWrite.content,
-    OWNER_READ_WRITE_MODE,
-    managedTomlWrite.contentComparator,
+    {
+      contentComparator: managedTomlWrite.contentComparator,
+      mode: OWNER_READ_WRITE_MODE,
+    },
   );
 }
 
@@ -144,14 +153,12 @@ function createWritePlan(
   kind: ManagedWriteKind,
   filePath: string,
   content: string,
-  mode: number,
-  contentComparator?: ManagedTextComparator,
+  writeOptions: PlannedManagedWriteOptions,
 ): ManagedWritePlan {
   return {
     content,
-    contentComparator,
     filePath,
     kind,
-    mode,
+    writeOptions,
   };
 }

@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  GONKAGATE_PROVIDER_ID,
-  GONKAGATE_PROVIDER_NAME,
-} from "../src/constants/gateway.js";
+import { GONKAGATE_PROVIDER_ID } from "../src/constants/gateway.js";
 import { DEFAULT_MODEL } from "../src/constants/models.js";
 import {
   buildInstallConfigPlan,
@@ -16,11 +13,18 @@ import {
 } from "../src/install/toml-config.js";
 import {
   expectTomlBoolean,
-  expectTomlString,
   expectTomlTable,
 } from "./helpers/structured-data.js";
 import {
+  expectGonkagateActivationConfig,
+  expectGonkagateProviderConfig,
+  expectTrustedProjectConfig,
+} from "./helpers/install-config-assertions.js";
+import {
+  TEST_CODEX_HOME,
   TEST_INSTALL_PATHS,
+  TEST_NODE_EXECUTABLE,
+  TEST_PLATFORM,
   TEST_TOKEN_COMMAND,
   createLoadedTomlConfig,
 } from "./helpers/install-fixtures.js";
@@ -50,9 +54,17 @@ test("planInstallConfigWrites keeps user scope config ownership centralized", as
 
   assert.equal(userLayer.target, "user");
   assert.equal(userLayer.filePath, testPaths.userConfigPath);
-  assert.equal(userLayer.config.model_provider, GONKAGATE_PROVIDER_ID);
-  assert.equal(userLayer.config.model, DEFAULT_MODEL.modelId);
-  assert.equal(userLayer.config.model_catalog_json, testPaths.modelCatalogPath);
+  expectGonkagateActivationConfig(userLayer.config, {
+    configLabel: "userLayer.config",
+    modelCatalogPath: testPaths.modelCatalogPath,
+  });
+  expectGonkagateProviderConfig(userLayer.config, {
+    codexHome: TEST_CODEX_HOME,
+    configLabel: "userLayer.config",
+    helperPath: TEST_TOKEN_COMMAND.helperFilePath,
+    nodeExecutable: TEST_NODE_EXECUTABLE,
+    platform: TEST_PLATFORM,
+  });
   const analyticsConfig = expectTomlTable(
     userLayer.config.analytics,
     "userLayer.config.analytics",
@@ -96,48 +108,28 @@ test("planInstallConfigWrites splits local scope across user and project layers"
 
   const userLayer = configPlan[0];
   const projectLayer = configPlan[1];
-  const userProjects = expectTomlTable(
-    userLayer.config.projects,
-    "userLayer.config.projects",
-  );
-  const modelProviders = expectTomlTable(
-    userLayer.config.model_providers,
-    "userLayer.config.model_providers",
-  );
-  const gonkagateProvider = expectTomlTable(
-    modelProviders[GONKAGATE_PROVIDER_ID],
-    `userLayer.config.model_providers.${GONKAGATE_PROVIDER_ID}`,
-  );
-  const trustedProjectConfig = expectTomlTable(
-    userProjects[testPaths.projectRoot],
-    `userLayer.config.projects.${testPaths.projectRoot}`,
-  );
 
   assert.equal(userLayer.filePath, testPaths.userConfigPath);
   assert.equal(userLayer.config.model_provider, undefined);
   assert.equal(userLayer.config.model, undefined);
-  assert.equal(
-    expectTomlString(
-      gonkagateProvider.name,
-      `userLayer.config.model_providers.${GONKAGATE_PROVIDER_ID}.name`,
-    ),
-    GONKAGATE_PROVIDER_NAME,
-  );
-  assert.equal(
-    expectTomlString(
-      trustedProjectConfig.trust_level,
-      `userLayer.config.projects.${testPaths.projectRoot}.trust_level`,
-    ),
-    "trusted",
+  expectGonkagateProviderConfig(userLayer.config, {
+    codexHome: TEST_CODEX_HOME,
+    configLabel: "userLayer.config",
+    helperPath: TEST_TOKEN_COMMAND.helperFilePath,
+    nodeExecutable: TEST_NODE_EXECUTABLE,
+    platform: TEST_PLATFORM,
+  });
+  expectTrustedProjectConfig(
+    userLayer.config,
+    testPaths.projectRoot,
+    "userLayer.config",
   );
 
   assert.equal(projectLayer.filePath, testPaths.projectConfigPath);
-  assert.equal(projectLayer.config.model_provider, GONKAGATE_PROVIDER_ID);
-  assert.equal(projectLayer.config.model, DEFAULT_MODEL.modelId);
-  assert.equal(
-    projectLayer.config.model_catalog_json,
-    testPaths.modelCatalogPath,
-  );
+  expectGonkagateActivationConfig(projectLayer.config, {
+    configLabel: "projectLayer.config",
+    modelCatalogPath: testPaths.modelCatalogPath,
+  });
   assert.equal(projectLayer.config.theme, "keep");
 });
 
@@ -196,8 +188,10 @@ test("buildInstallConfigPlan keeps pure config merging separate from file loadin
   });
 
   assert.equal(userLayer.target, "user");
-  assert.equal(userLayer.config.model_provider, GONKAGATE_PROVIDER_ID);
-  assert.equal(userLayer.config.model, DEFAULT_MODEL.modelId);
+  expectGonkagateActivationConfig(userLayer.config, {
+    configLabel: "userLayer.config",
+    modelCatalogPath: testPaths.modelCatalogPath,
+  });
 });
 
 test("createManagedTomlConfigWrite keeps TOML render and no-op comparison together", () => {

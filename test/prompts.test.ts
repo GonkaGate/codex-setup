@@ -6,6 +6,8 @@ import {
   buildScopePromptConfig,
   buildTrackedLocalConfigActionPromptConfig,
   promptForModel,
+  promptForScope,
+  promptForTrackedLocalConfigAction,
 } from "../src/install/prompts.js";
 
 test("buildModelPromptConfig keeps numbered-select defaults centralized", () => {
@@ -66,4 +68,19 @@ test("promptForModel bypasses the select prompt when only one model is supported
 
   assert.equal(selectCount, 0);
   assert.equal(selectedModel, DEFAULT_MODEL);
+});
+
+test("promptForScope accepts injected runners without requiring local TTY checks", async () => {
+  const selectedScope = await promptForScope("user", async () => "local");
+
+  assert.equal(selectedScope, "local");
+});
+
+test("promptForTrackedLocalConfigAction accepts injected runners without requiring local TTY checks", async () => {
+  const action = await promptForTrackedLocalConfigAction(
+    ".codex/config.toml",
+    async () => "cancel",
+  );
+
+  assert.equal(action, "cancel");
 });

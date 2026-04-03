@@ -3,8 +3,8 @@ import {
   type SupportedModel,
 } from "../constants/models.js";
 import {
-  type ConfigFilePlanEntry,
   planInstallConfigWrites,
+  type PlannedConfigWrite,
 } from "./codex-config.js";
 import { OWNER_READ_WRITE_MODE } from "./file-permissions.js";
 import type { ConfigLayerTarget, ScopeConfigLayer } from "./install-scope.js";
@@ -113,21 +113,21 @@ function planModelCatalogManagedWrite(
 }
 
 async function planConfigManagedWrites(
-  context: PlanInstallManagedWritesInput,
+  input: PlanInstallManagedWritesInput,
 ): Promise<PlannedManagedWrite[]> {
-  const configPlan = await planInstallConfigWrites({
-    configLayers: context.configLayers,
-    loadTomlConfig: context.loadTomlConfig,
-    paths: context.installPaths,
-    selectedModel: context.selectedModel,
-    tokenCommand: context.tokenCommand,
+  const plannedConfigWrites = await planInstallConfigWrites({
+    configLayers: input.configLayers,
+    loadTomlConfig: input.loadTomlConfig,
+    paths: input.installPaths,
+    selectedModel: input.selectedModel,
+    tokenCommand: input.tokenCommand,
   });
 
-  return configPlan.map((entry) => prepareTomlConfigWrite(entry));
+  return plannedConfigWrites.map((entry) => prepareTomlConfigWrite(entry));
 }
 
 function prepareTomlConfigWrite(
-  entry: ConfigFilePlanEntry,
+  entry: PlannedConfigWrite,
 ): PlannedManagedWrite {
   const managedTomlWrite = createManagedTomlConfigWrite(entry.config);
 

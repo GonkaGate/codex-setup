@@ -8,7 +8,7 @@ import { DEFAULT_MODEL } from "../src/constants/models.js";
 import {
   buildInstallConfigPlan,
   planInstallConfigWrites,
-  type ConfigPathsInput,
+  type ConfigPatchPaths,
 } from "../src/install/codex-config.js";
 import { getScopeConfigLayers } from "../src/install/install-scope.js";
 import {
@@ -19,7 +19,7 @@ import {
 } from "../src/install/toml-config.js";
 import type { TokenCommandConfig } from "../src/install/token-helper.js";
 
-const testPaths: ConfigPathsInput = {
+const testPaths: ConfigPatchPaths = {
   codexHome: "/Users/test/.codex",
   modelCatalogPath: "/Users/test/.codex/model-catalogs/gonkagate.json",
   projectRoot: "/Users/test/project",
@@ -194,7 +194,7 @@ test("buildInstallConfigPlan accumulates repeated layers for the same target", (
         target: "user",
       },
     ],
-    currentConfigs: {
+    currentConfigsByTarget: {
       user: {
         analytics: {
           enabled: false,
@@ -262,7 +262,7 @@ test("planInstallConfigWrites loads each target once even when multiple layers s
 test("buildInstallConfigPlan keeps pure config merging separate from file loading", () => {
   const [userLayer] = buildInstallConfigPlan({
     configLayers: getScopeConfigLayers("user"),
-    currentConfigs: {
+    currentConfigsByTarget: {
       user: {
         analytics: {
           enabled: false,

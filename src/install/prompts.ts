@@ -20,7 +20,7 @@ export async function promptForApiKey(): Promise<string> {
 export function buildModelPromptConfig(
   models: readonly SupportedModel[],
   defaultModelKey: SupportedModelKey,
-): PromptConfig<SupportedModelKey> {
+): SelectPromptConfig<SupportedModelKey> {
   if (models.length === 0) {
     throw new PromptError(
       "no_supported_models",
@@ -30,7 +30,7 @@ export function buildModelPromptConfig(
 
   const defaultModel = requireModel(models, defaultModelKey);
 
-  return buildNumberedSelectConfig({
+  return buildNumberedSelectPromptConfig({
     choices: models.map((model) => ({
       description: model.description
         ? `${model.description} Model ID: ${model.modelId}`
@@ -47,8 +47,8 @@ export function buildModelPromptConfig(
 
 export function buildScopePromptConfig(
   defaultScope: InstallScope,
-): PromptConfig<InstallScope> {
-  return buildNumberedSelectConfig({
+): SelectPromptConfig<InstallScope> {
+  return buildNumberedSelectPromptConfig({
     choices: [
       {
         description:
@@ -73,8 +73,8 @@ export function buildScopePromptConfig(
 
 export function buildTrackedLocalConfigActionPromptConfig(
   relativeConfigPath: string,
-): PromptConfig<TrackedLocalConfigAction> {
-  return buildNumberedSelectConfig({
+): SelectPromptConfig<TrackedLocalConfigAction> {
+  return buildNumberedSelectPromptConfig({
     choices: [
       {
         description:
@@ -100,34 +100,44 @@ export function buildTrackedLocalConfigActionPromptConfig(
 export async function promptForModel(
   models: readonly SupportedModel[],
   defaultModelKey: SupportedModelKey,
-  selectRunner: SelectRunner<SupportedModelKey> = select as SelectRunner<SupportedModelKey>,
+  selectRunner: SelectPromptRunner<SupportedModelKey> = defaultModelSelectRunner,
 ): Promise<SupportedModel> {
   if (models.length === 1) {
     return models[0];
   }
 
-  const selectedModelKey = await runSelect(
+  const selectedModelKey = await runSelectPrompt(
     buildModelPromptConfig(models, defaultModelKey),
     selectRunner,
-    { skipTtyCheck: true },
+    {
+      requireTty: shouldRequireTty(selectRunner, defaultModelSelectRunner),
+    },
   );
   return requireModel(models, selectedModelKey);
 }
 
 export async function promptForScope(
   defaultScope: InstallScope,
-  selectRunner: SelectRunner<InstallScope> = select as SelectRunner<InstallScope>,
+  selectRunner: SelectPromptRunner<InstallScope> = defaultScopeSelectRunner,
 ): Promise<InstallScope> {
-  return runSelect(buildScopePromptConfig(defaultScope), selectRunner);
+  return runSelectPrompt(buildScopePromptConfig(defaultScope), selectRunner, {
+    requireTty: shouldRequireTty(selectRunner, defaultScopeSelectRunner),
+  });
 }
 
 export async function promptForTrackedLocalConfigAction(
   relativeConfigPath: string,
-  selectRunner: SelectRunner<TrackedLocalConfigAction> = select as SelectRunner<TrackedLocalConfigAction>,
+  selectRunner: SelectPromptRunner<TrackedLocalConfigAction> = defaultTrackedLocalConfigActionSelectRunner,
 ): Promise<TrackedLocalConfigAction> {
-  return runSelect(
+  return runSelectPrompt(
     buildTrackedLocalConfigActionPromptConfig(relativeConfigPath),
     selectRunner,
+    {
+      requireTty: shouldRequireTty(
+        selectRunner,
+        defaultTrackedLocalConfigActionSelectRunner,
+      ),
+    },
   );
 }
 
@@ -156,9 +166,9 @@ function requireModel(
   return selectedModel;
 }
 
-function buildNumberedSelectConfig<Value>(
-  input: Omit<PromptConfig<Value>, "loop" | "theme"> & { loop?: boolean },
-): PromptConfig<Value> {
+function buildNumberedSelectPromptConfig<Value>(
+  input: Omit<SelectPromptConfig<Value>, "loop" | "theme"> & { loop?: boolean },
+): SelectPromptConfig<Value> {
   return {
     ...input,
     loop: input.loop ?? false,
@@ -166,16 +176,23 @@ function buildNumberedSelectConfig<Value>(
   };
 }
 
-async function runSelect<Value>(
-  config: PromptConfig<Value>,
-  selectRunner: SelectRunner<Value>,
-  options: { skipTtyCheck?: boolean } = {},
+async function runSelectPrompt<Value>(
+  config: SelectPromptConfig<Value>,
+  selectRunner: SelectPromptRunner<Value>,
+  options: { requireTty?: boolean } = {},
 ): Promise<Value> {
-  if (!(options.skipTtyCheck ?? false)) {
+  if (options.requireTty ?? true) {
     assertInteractiveTty();
   }
 
   return selectRunner(config).catch(rethrowPromptExit);
+}
+
+function shouldRequireTty<Value>(
+  selectRunner: SelectPromptRunner<Value>,
+  defaultSelectRunner: SelectPromptRunner<Value>,
+): boolean {
+  return selectRunner === defaultSelectRunner;
 }
 
 function rethrowPromptExit(error: unknown): never {
@@ -191,15 +208,15 @@ function rethrowPromptExit(error: unknown): never {
   throw error;
 }
 
-interface PromptChoice<Value> {
+interface SelectPromptChoice<Value> {
   description?: string;
   name: string;
   short?: string;
   value: Value;
 }
 
-interface PromptConfig<Value> {
-  choices: readonly PromptChoice<Value>[];
+interface SelectPromptConfig<Value> {
+  choices: readonly SelectPromptChoice<Value>[];
   default: Value;
   loop?: boolean;
   message: string;
@@ -209,7 +226,15 @@ interface PromptConfig<Value> {
   };
 }
 
-type SelectRunner<Value> = (config: PromptConfig<Value>) => Promise<Value>;
+type SelectPromptRunner<Value> = (
+  config: SelectPromptConfig<Value>,
+) => Promise<Value>;
+
+const defaultModelSelectRunner =
+  select as SelectPromptRunner<SupportedModelKey>;
+const defaultScopeSelectRunner = select as SelectPromptRunner<InstallScope>;
+const defaultTrackedLocalConfigActionSelectRunner =
+  select as SelectPromptRunner<TrackedLocalConfigAction>;
 
 const NUMBERED_SELECT_THEME = {
   indexMode: "number",

@@ -6,8 +6,8 @@ import type {
   PlannedManagedWrite,
   PlannedManagedWritePhase,
 } from "./install-managed-writes.js";
+import type { InstallCommitDependencies } from "./install-dependencies.js";
 import type { PreparedInstallPlan } from "./install-state.js";
-import type { InstallCommitDependencies } from "./install-use-case.js";
 import type {
   ManagedWriteOptions,
   ManagedWriteResult,
@@ -20,10 +20,10 @@ export async function commitInstallPlan(
   const writes: ManagedWriteResult[] = [];
 
   try {
-    if (installPlan.state.localProjectConfigIgnoreTarget) {
+    if (installPlan.context.localProjectConfigIgnoreTarget) {
       // Keep the repo-local config ignored only once the install is ready to commit.
       await dependencies.ensureLocalProjectConfigIgnored(
-        installPlan.state.localProjectConfigIgnoreTarget,
+        installPlan.context.localProjectConfigIgnoreTarget,
       );
     }
 

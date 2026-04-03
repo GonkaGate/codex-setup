@@ -40,6 +40,10 @@ export interface ConfigLayerPlanEntry {
   target: ConfigLayerTarget;
 }
 
+export interface ConfigFilePlanEntry extends ConfigLayerPlanEntry {
+  filePath: string;
+}
+
 export interface ManagedTomlConfigWrite {
   content: string;
   contentComparator: (currentText: string, nextText: string) => boolean;
@@ -53,8 +57,48 @@ export interface BuildInstallConfigPlanInput {
   tokenCommand: TokenCommandConfig;
 }
 
-const USER_SCOPE_CONFIG_TARGETS = ["user"] as const;
-const LOCAL_SCOPE_CONFIG_TARGETS = ["user", "project"] as const;
+export interface PlanInstallConfigWritesInput {
+  finalScope: InstallScope;
+  loadTomlConfig: (filePath: string) => Promise<LoadedTomlConfig>;
+  paths: ConfigPathsInput & ConfigLayerPaths;
+  selectedModel: SupportedModel;
+  tokenCommand: TokenCommandConfig;
+}
+
+interface ConfigPlanBuildContext {
+  paths: ConfigPathsInput;
+  selectedModel: SupportedModel;
+  tokenCommand: TokenCommandConfig;
+}
+
+type ConfigPatchBuilder = (context: ConfigPlanBuildContext) => TomlTable;
+
+interface ConfigLayerDefinition {
+  patchBuilders: readonly ConfigPatchBuilder[];
+  resolveFilePath: (paths: ConfigLayerPaths) => string;
+  target: ConfigLayerTarget;
+}
+
+const CONFIG_LAYER_DEFINITIONS: Record<
+  InstallScope,
+  readonly ConfigLayerDefinition[]
+> = {
+  local: [
+    createConfigLayerDefinition("user", (paths) => paths.userConfigPath, [
+      buildProviderLayerPatch,
+      buildLocalTrustLayerPatch,
+    ]),
+    createConfigLayerDefinition("project", (paths) => paths.projectConfigPath, [
+      buildActivationLayerPatch,
+    ]),
+  ],
+  user: [
+    createConfigLayerDefinition("user", (paths) => paths.userConfigPath, [
+      buildActivationLayerPatch,
+      buildProviderLayerPatch,
+    ]),
+  ],
+};
 
 export async function loadTomlConfig(
   filePath: string,
@@ -84,96 +128,68 @@ export async function loadTomlConfig(
   }
 }
 
-export function getConfigTargetsForScope(
-  finalScope: InstallScope,
-): readonly ConfigLayerTarget[] {
-  return finalScope === "local"
-    ? LOCAL_SCOPE_CONFIG_TARGETS
-    : USER_SCOPE_CONFIG_TARGETS;
-}
+export async function planInstallConfigWrites(
+  input: PlanInstallConfigWritesInput,
+): Promise<ConfigFilePlanEntry[]> {
+  const layerDefinitions = getConfigLayerDefinitions(input.finalScope);
+  const context = createConfigPlanBuildContext(input);
+  const plannedEntries: ConfigFilePlanEntry[] = [];
 
-export function resolveConfigTargetPath(
-  target: ConfigLayerTarget,
-  paths: ConfigLayerPaths,
-): string {
-  return target === "project" ? paths.projectConfigPath : paths.userConfigPath;
+  for (const definition of layerDefinitions) {
+    const filePath = definition.resolveFilePath(input.paths);
+    const currentConfig = (await input.loadTomlConfig(filePath)).settings;
+    const entry = buildConfigPlanEntry(definition, currentConfig, context);
+
+    plannedEntries.push({
+      ...entry,
+      filePath,
+    });
+  }
+
+  return plannedEntries;
 }
 
 export function buildInstallConfigPlan(
   input: BuildInstallConfigPlanInput,
 ): ConfigLayerPlanEntry[] {
-  if (input.finalScope === "user") {
-    return [
-      {
-        config: applyUserScopeConfig(
-          getCurrentConfig(input.currentConfigs, "user"),
-          input.selectedModel,
-          input.paths,
-          input.tokenCommand,
-        ),
-        target: "user",
-      },
-    ];
-  }
+  const context = createConfigPlanBuildContext(input);
 
-  return [
-    {
-      config: applyLocalUserConfig(
-        getCurrentConfig(input.currentConfigs, "user"),
-        input.paths,
-        input.tokenCommand,
-      ),
-      target: "user",
-    },
-    {
-      config: applyLocalProjectConfig(
-        getCurrentConfig(input.currentConfigs, "project"),
-        input.selectedModel,
-        input.paths,
-      ),
-      target: "project",
-    },
-  ];
-}
-
-export function applyUserScopeConfig(
-  currentConfig: TomlTable,
-  selectedModel: SupportedModel,
-  paths: ConfigPathsInput,
-  tokenCommand: TokenCommandConfig,
-): TomlTable {
-  return mergeTomlTables(
-    currentConfig,
-    mergeTomlPatches(
-      buildActivationConfigPatch(selectedModel, paths),
-      buildProviderConfigPatch(paths, tokenCommand),
+  return getConfigLayerDefinitions(input.finalScope).map((definition) =>
+    buildConfigPlanEntry(
+      definition,
+      input.currentConfigs[definition.target] ?? {},
+      context,
     ),
   );
 }
 
-export function applyLocalUserConfig(
-  currentConfig: TomlTable,
-  paths: ConfigPathsInput,
-  tokenCommand: TokenCommandConfig,
-): TomlTable {
-  return mergeTomlTables(
-    currentConfig,
-    mergeTomlPatches(
-      buildProviderConfigPatch(paths, tokenCommand),
-      buildLocalTrustConfigPatch(paths.projectRoot),
-    ),
-  );
+function createConfigPlanBuildContext(
+  input: Pick<
+    BuildInstallConfigPlanInput,
+    "paths" | "selectedModel" | "tokenCommand"
+  >,
+): ConfigPlanBuildContext {
+  return {
+    paths: input.paths,
+    selectedModel: input.selectedModel,
+    tokenCommand: input.tokenCommand,
+  };
 }
 
-export function applyLocalProjectConfig(
+function buildConfigPlanEntry(
+  definition: ConfigLayerDefinition,
   currentConfig: TomlTable,
-  selectedModel: SupportedModel,
-  paths: ConfigPathsInput,
-): TomlTable {
-  return mergeTomlTables(
-    currentConfig,
-    buildActivationConfigPatch(selectedModel, paths),
-  );
+  context: ConfigPlanBuildContext,
+): ConfigLayerPlanEntry {
+  return {
+    config: mergeTomlTables(
+      currentConfig,
+      mergeTomlPatches(
+        ...definition.patchBuilders.map((buildPatch) => buildPatch(context)),
+      ),
+    ),
+    target: definition.target,
+  };
 }
 
 export function renderTomlConfig(config: TomlTable): string {
@@ -218,6 +234,30 @@ function mergeTomlPatches(...patches: readonly TomlTable[]): TomlTable {
   }
 
   return nextPatch;
+}
+
+function createConfigLayerDefinition(
+  target: ConfigLayerTarget,
+  resolveFilePath: (paths: ConfigLayerPaths) => string,
+  patchBuilders: readonly ConfigPatchBuilder[],
+): ConfigLayerDefinition {
+  return {
+    patchBuilders,
+    resolveFilePath,
+    target,
+  };
+}
+
+function buildActivationLayerPatch(context: ConfigPlanBuildContext): TomlTable {
+  return buildActivationConfigPatch(context.selectedModel, context.paths);
+}
+
+function buildProviderLayerPatch(context: ConfigPlanBuildContext): TomlTable {
+  return buildProviderConfigPatch(context.paths, context.tokenCommand);
+}
+
+function buildLocalTrustLayerPatch(context: ConfigPlanBuildContext): TomlTable {
+  return buildLocalTrustConfigPatch(context.paths.projectRoot);
 }
 
 function buildActivationConfigPatch(
@@ -302,11 +342,10 @@ function isPlainTomlTable(value: unknown): value is TomlTable {
   return prototype === Object.prototype || prototype === null;
 }
 
-function getCurrentConfig(
-  currentConfigs: Partial<Record<ConfigLayerTarget, TomlTable>>,
-  target: ConfigLayerTarget,
-): TomlTable {
-  return currentConfigs[target] ?? {};
+function getConfigLayerDefinitions(
+  finalScope: InstallScope,
+): readonly ConfigLayerDefinition[] {
+  return CONFIG_LAYER_DEFINITIONS[finalScope];
 }
 
 export function areEquivalentTomlTexts(

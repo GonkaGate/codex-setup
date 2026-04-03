@@ -16,6 +16,8 @@
   },
   "files": [
     "bin",
+    "contract-definitions.d.ts",
+    "contract-definitions.js",
     "contract-metadata.d.ts",
     "contract-metadata.js",
     "dist",

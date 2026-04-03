@@ -1,8 +1,9 @@
 import { DEFAULT_MODEL } from "../../src/constants/models.js";
 import {
-  defaultInstallUseCaseDependencies,
+  createInstallUseCaseDependencies,
   runInstallUseCase,
   type InstallOutcome,
+  type InstallUseCaseDependencyOverrides,
   type InstallUseCaseDependencies,
 } from "../../src/install/install-use-case.js";
 import { createTempWorkspace } from "./workspace.js";
@@ -34,30 +35,29 @@ export interface InstallScenarioRunOptions {
 export interface InstallScenario {
   codexHome: string;
   createDependencies: (
-    overrides?: Partial<InstallUseCaseDependencies>,
+    overrides?: InstallUseCaseDependencyOverrides,
   ) => InstallUseCaseDependencies;
   run: (options?: InstallScenarioRunOptions) => Promise<InstallOutcome>;
   workspace: string;
 }
 
-function createInstallDependencies(
-  options: InstallDependencyOptions,
-): InstallUseCaseDependencies {
+function createInstallDependencyOverrides(options: InstallDependencyOptions) {
   return {
-    ...defaultInstallUseCaseDependencies,
-    checkCodexAvailable: () => ({
-      command: "codex",
-      version: options.codexVersion ?? DEFAULT_CODEX_VERSION,
-    }),
-    environment: {
-      ...process.env,
-      CODEX_HOME: options.codexHome,
+    input: {
+      checkCodexAvailable: () => ({
+        command: "codex",
+        version: options.codexVersion ?? DEFAULT_CODEX_VERSION,
+      }),
+      environment: {
+        ...process.env,
+        CODEX_HOME: options.codexHome,
+      },
+      promptForApiKey: async () => options.apiKey ?? DEFAULT_TEST_API_KEY,
+      promptForModel: async () => DEFAULT_MODEL,
+      promptForScope: async () => options.promptScope,
+      promptForTrackedLocalConfigAction: async () =>
+        options.trackedLocalAction ?? "cancel",
     },
-    promptForApiKey: async () => options.apiKey ?? DEFAULT_TEST_API_KEY,
-    promptForModel: async () => DEFAULT_MODEL,
-    promptForScope: async () => options.promptScope,
-    promptForTrackedLocalConfigAction: async () =>
-      options.trackedLocalAction ?? "cancel",
   };
 }
 
@@ -69,17 +69,22 @@ export async function createInstallScenario(
   const codexHome = await createTempWorkspace(`codex-setup-${name}-home`);
 
   const createDependencies = (
-    overrides: Partial<InstallUseCaseDependencies> = {},
-  ): InstallUseCaseDependencies => ({
-    ...createInstallDependencies({
-      apiKey: options.apiKey,
-      codexHome,
-      codexVersion: options.codexVersion,
-      promptScope: options.scope,
-      trackedLocalAction: options.trackedLocalAction,
-    }),
-    ...overrides,
-  });
+    overrides: InstallUseCaseDependencyOverrides = {},
+  ): InstallUseCaseDependencies =>
+    createInstallUseCaseDependencies({
+      commit: overrides.commit,
+      input: {
+        ...createInstallDependencyOverrides({
+          apiKey: options.apiKey,
+          codexHome,
+          codexVersion: options.codexVersion,
+          promptScope: options.scope,
+          trackedLocalAction: options.trackedLocalAction,
+        }).input,
+        ...overrides.input,
+      },
+      planning: overrides.planning,
+    });
 
   const run = async (
     runOptions: InstallScenarioRunOptions = {},

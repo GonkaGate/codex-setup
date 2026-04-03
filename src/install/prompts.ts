@@ -28,6 +28,17 @@ type SelectPrompt<Value> = (
   config: SelectPromptConfig<Value>,
 ) => Promise<Value>;
 
+type NumberedSelectPromptConfigInput<Value> = Omit<
+  SelectPromptConfig<Value>,
+  "loop" | "theme"
+> & {
+  loop?: boolean;
+};
+
+const NUMBERED_SELECT_THEME = {
+  indexMode: "number",
+} as const;
+
 export async function promptForApiKey(): Promise<string> {
   assertInteractiveTty();
 
@@ -52,7 +63,7 @@ export function buildModelPromptConfig(
 
   const defaultModel = requireModel(models, defaultModelKey);
 
-  return {
+  return createNumberedSelectPromptConfig({
     choices: models.map((model) => ({
       description: model.description
         ? `${model.description} Model ID: ${model.modelId}`
@@ -62,37 +73,15 @@ export function buildModelPromptConfig(
       value: model.key,
     })),
     default: defaultModel.key,
-    loop: false,
     message: "Choose a GonkaGate model for Codex CLI",
     pageSize: Math.min(models.length, 8),
-    theme: {
-      indexMode: "number",
-    },
-  };
+  });
 }
 
-export async function promptForModel(
-  models: readonly SupportedModel[],
-  defaultModelKey: SupportedModelKey,
-  selectPrompt: SelectPrompt<SupportedModelKey> = select as SelectPrompt<SupportedModelKey>,
-): Promise<SupportedModel> {
-  if (models.length === 1) {
-    return models[0];
-  }
-
-  const selectedModelKey = await selectPrompt(
-    buildModelPromptConfig(models, defaultModelKey),
-  ).catch(rethrowPromptExit);
-  return requireModel(models, selectedModelKey);
-}
-
-export async function promptForScope(
+export function buildScopePromptConfig(
   defaultScope: InstallScope,
-  selectPrompt: SelectPrompt<InstallScope> = select as SelectPrompt<InstallScope>,
-): Promise<InstallScope> {
-  assertInteractiveTty();
-
-  return selectPrompt({
+): SelectPromptConfig<InstallScope> {
+  return createNumberedSelectPromptConfig({
     choices: [
       {
         description:
@@ -110,22 +99,15 @@ export async function promptForScope(
       },
     ],
     default: defaultScope,
-    loop: false,
     message: "Choose where GonkaGate should be activated",
     pageSize: 2,
-    theme: {
-      indexMode: "number",
-    },
-  }).catch(rethrowPromptExit);
+  });
 }
 
-export async function promptForTrackedLocalConfigAction(
+export function buildTrackedLocalConfigActionPromptConfig(
   relativeConfigPath: string,
-  selectPrompt: SelectPrompt<TrackedLocalConfigAction> = select as SelectPrompt<TrackedLocalConfigAction>,
-): Promise<TrackedLocalConfigAction> {
-  assertInteractiveTty();
-
-  return selectPrompt({
+): SelectPromptConfig<TrackedLocalConfigAction> {
+  return createNumberedSelectPromptConfig({
     choices: [
       {
         description:
@@ -143,13 +125,43 @@ export async function promptForTrackedLocalConfigAction(
       },
     ],
     default: "user",
-    loop: false,
     message: `${relativeConfigPath} is already tracked by git. How should the installer continue?`,
     pageSize: 2,
-    theme: {
-      indexMode: "number",
-    },
-  }).catch(rethrowPromptExit);
+  });
+}
+
+export async function promptForModel(
+  models: readonly SupportedModel[],
+  defaultModelKey: SupportedModelKey,
+  selectPrompt: SelectPrompt<SupportedModelKey> = select as SelectPrompt<SupportedModelKey>,
+): Promise<SupportedModel> {
+  if (models.length === 1) {
+    return models[0];
+  }
+
+  const selectedModelKey = await runSelectPrompt(
+    buildModelPromptConfig(models, defaultModelKey),
+    selectPrompt,
+    { requireTty: false },
+  );
+  return requireModel(models, selectedModelKey);
+}
+
+export async function promptForScope(
+  defaultScope: InstallScope,
+  selectPrompt: SelectPrompt<InstallScope> = select as SelectPrompt<InstallScope>,
+): Promise<InstallScope> {
+  return runSelectPrompt(buildScopePromptConfig(defaultScope), selectPrompt);
+}
+
+export async function promptForTrackedLocalConfigAction(
+  relativeConfigPath: string,
+  selectPrompt: SelectPrompt<TrackedLocalConfigAction> = select as SelectPrompt<TrackedLocalConfigAction>,
+): Promise<TrackedLocalConfigAction> {
+  return runSelectPrompt(
+    buildTrackedLocalConfigActionPromptConfig(relativeConfigPath),
+    selectPrompt,
+  );
 }
 
 function assertInteractiveTty(): void {
@@ -175,6 +187,28 @@ function requireModel(
   }
 
   return selectedModel;
+}
+
+function createNumberedSelectPromptConfig<Value>(
+  input: NumberedSelectPromptConfigInput<Value>,
+): SelectPromptConfig<Value> {
+  return {
+    ...input,
+    loop: input.loop ?? false,
+    theme: NUMBERED_SELECT_THEME,
+  };
+}
+
+async function runSelectPrompt<Value>(
+  config: SelectPromptConfig<Value>,
+  selectPrompt: SelectPrompt<Value>,
+  options: { requireTty?: boolean } = {},
+): Promise<Value> {
+  if (options.requireTty ?? true) {
+    assertInteractiveTty();
+  }
+
+  return selectPrompt(config).catch(rethrowPromptExit);
 }
 
 function rethrowPromptExit(error: unknown): never {

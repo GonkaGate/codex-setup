@@ -1,32 +1,14 @@
-import { CONTRACT_METADATA } from "../../contract-metadata.js";
+import type { SupportedModelContractDefinition } from "../../contract-definitions.js";
+import { SUPPORTED_MODELS_CONTRACT } from "../../contract-definitions.js";
 import {
   GONKAGATE_MODEL_CATALOG,
   type ModelCatalog,
   type ModelCatalogEntry,
 } from "./model-catalog.js";
 
-export interface SupportedModelDefinition {
-  readonly key: string;
-  readonly displayName: string;
-  readonly modelId: string;
-  readonly description?: string;
-  readonly isDefault?: boolean;
-}
+export type SupportedModelDefinition = SupportedModelContractDefinition;
 
-const curatedModelRegistry = [
-  {
-    key: "gpt-5.4",
-    displayName: "GPT-5.4",
-    modelId: "gpt-5.4",
-    description: "Current validated GonkaGate model for Codex CLI.",
-    isDefault: true,
-  },
-] as const satisfies readonly SupportedModelDefinition[];
-
-assertSupportedModelsMatchContract(
-  curatedModelRegistry,
-  CONTRACT_METADATA.supportedModels,
-);
+const curatedModelRegistry = SUPPORTED_MODELS_CONTRACT;
 
 const defaultModels = curatedModelRegistry.filter((model) => model.isDefault);
 
@@ -44,34 +26,6 @@ export const DEFAULT_MODEL_KEY: SupportedModelKey = DEFAULT_MODEL.key;
 export const SUPPORTED_MODEL_KEYS: SupportedModelKey[] = SUPPORTED_MODELS.map(
   (model) => model.key,
 );
-
-function assertSupportedModelsMatchContract(
-  models: readonly SupportedModelDefinition[],
-  contractModels: readonly SupportedModelDefinition[],
-): void {
-  if (models.length !== contractModels.length) {
-    throw new Error(
-      `Supported model registry length ${models.length} does not match CONTRACT_METADATA.supportedModels length ${contractModels.length}.`,
-    );
-  }
-
-  for (const [index, model] of models.entries()) {
-    const contractModel = contractModels[index];
-
-    if (
-      !contractModel ||
-      model.key !== contractModel.key ||
-      model.displayName !== contractModel.displayName ||
-      model.modelId !== contractModel.modelId ||
-      model.description !== contractModel.description ||
-      Boolean(model.isDefault) !== Boolean(contractModel.isDefault)
-    ) {
-      throw new Error(
-        `Supported model registry entry ${index} in src/constants/models.ts does not match CONTRACT_METADATA.supportedModels.`,
-      );
-    }
-  }
-}
 
 export function getSupportedModelByKey(
   key: string,

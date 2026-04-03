@@ -1,10 +1,7 @@
-export interface SupportedModelContract {
-  readonly key: string;
-  readonly displayName: string;
-  readonly modelId: string;
-  readonly description?: string;
-  readonly isDefault?: boolean;
-}
+import type {
+  SupportedModelContractDefinition,
+  VerifiedCodexContractDefinition,
+} from "./contract-definitions.js";
 
 export interface ContractMetadata {
   readonly binName: string;
@@ -12,12 +9,8 @@ export interface ContractMetadata {
   readonly cliVersion: string;
   readonly packageName: string;
   readonly publicEntrypoint: string;
-  readonly supportedModels: readonly SupportedModelContract[];
-  readonly verifiedCodex: {
-    readonly minVersion: string;
-    readonly modelCatalogVersion: string;
-    readonly verifiedDate: string;
-  };
+  readonly supportedModels: readonly SupportedModelContractDefinition[];
+  readonly verifiedCodex: VerifiedCodexContractDefinition;
 }
 
 export const CONTRACT_METADATA: ContractMetadata;

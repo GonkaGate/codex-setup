@@ -2,16 +2,13 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { Command, CommanderError, Option } from "commander";
 import { CONTRACT_METADATA } from "../contract-metadata.js";
+import { formatIntroOutput, formatSuccessOutput } from "./cli-output.js";
 import {
   DEFAULT_MODEL_KEY,
   SUPPORTED_MODELS,
   SUPPORTED_MODEL_KEYS,
 } from "./constants/models.js";
-import { GONKAGATE_BASE_URL } from "./constants/gateway.js";
-import {
-  runInstallUseCase,
-  type InstallOutcome,
-} from "./install/install-use-case.js";
+import { runInstallUseCase } from "./install/install-use-case.js";
 import type { InstallScope } from "./install/settings-paths.js";
 
 export interface CliOptions {
@@ -102,64 +99,13 @@ export function parseCliOptions(
 }
 
 function printIntro(): void {
-  console.log("Connect Codex CLI to GonkaGate in one step.\n");
-  console.log(
-    "This installer writes the minimum safe Codex config and keeps the secret under ~/.codex only.",
-  );
-  console.log(`Base URL is fixed to ${GONKAGATE_BASE_URL}.`);
-  console.log(
-    `Curated model choice: ${SUPPORTED_MODELS.map((model) => model.key).join(", ")}.\n`,
-  );
+  process.stdout.write(formatIntroOutput());
 }
 
-function printSuccess(outcome: InstallOutcome): void {
-  console.log("\nInstall complete.\n");
-  console.log(`Codex version: ${outcome.codex.version}`);
-  console.log(
-    `Activation scope: ${outcome.finalScope}${outcome.switchedToUserScope ? " (switched from local because .codex/config.toml is tracked)" : ""}`,
-  );
-  console.log(
-    `Model: ${outcome.selectedModel.displayName} (${outcome.selectedModel.modelId})`,
-  );
-
-  const changedFiles = outcome.writes.filter((write) => write.changed);
-  const unchangedFiles = outcome.writes.filter((write) => !write.changed);
-  const backupPaths = outcome.writes
-    .map((write) => write.backupPath)
-    .filter((backupPath): backupPath is string => backupPath !== undefined);
-
-  if (changedFiles.length > 0) {
-    console.log("\nUpdated files:");
-    for (const write of changedFiles) {
-      console.log(`- ${write.filePath}`);
-    }
-  }
-
-  if (unchangedFiles.length > 0) {
-    console.log("\nAlready up to date:");
-    for (const write of unchangedFiles) {
-      console.log(`- ${write.filePath}`);
-    }
-  }
-
-  if (backupPaths.length > 0) {
-    console.log("\nBackups:");
-    for (const backupPath of backupPaths) {
-      console.log(`- ${backupPath}`);
-    }
-  }
-
-  console.log("\nNext steps:");
-  console.log("1. Start Codex normally: codex");
-  console.log("2. In Codex, run: /status");
-  console.log("3. If the provider or model looks wrong, run: /debug-config");
-
-  if (outcome.finalScope === "local" && outcome.projectConfigPath) {
-    console.log("\nLocal scope details:");
-    console.log(`- Project root: ${outcome.projectRoot}`);
-    console.log(`- Project config: ${outcome.projectConfigPath}`);
-    console.log(`- Trusted path: ${outcome.trustTargetPath}`);
-  }
+function printSuccess(
+  outcome: Awaited<ReturnType<typeof runInstallUseCase>>,
+): void {
+  process.stdout.write(`\n${formatSuccessOutput(outcome)}`);
 }
 
 export async function run(argv = process.argv.slice(2)): Promise<void> {

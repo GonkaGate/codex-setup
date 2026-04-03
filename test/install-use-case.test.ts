@@ -143,6 +143,35 @@ test("tracked local config switches to user scope when requested", async () => {
   );
 });
 
+test("tracked local config can cancel without touching config files or git exclude", async () => {
+  const scenario = await createInstallScenario("tracked-cancel", {
+    scope: "local",
+    trackedLocalAction: "cancel",
+  });
+  initGitRepo(scenario.workspace);
+  await trackLocalProjectConfig(scenario.workspace);
+
+  const excludePath = path.join(scenario.workspace, ".git", "info", "exclude");
+  const initialExcludeText = await readFile(excludePath, "utf8");
+  const trackedConfigPath = path.join(
+    scenario.workspace,
+    ".codex",
+    "config.toml",
+  );
+
+  await assert.rejects(() => scenario.run(), /Installation cancelled\./);
+
+  assert.equal(
+    await readFile(trackedConfigPath, "utf8"),
+    'model_provider = "openai"\n',
+  );
+  await assert.rejects(
+    () => readFile(path.join(scenario.codexHome, "config.toml"), "utf8"),
+    /ENOENT/,
+  );
+  assert.equal(await readFile(excludePath, "utf8"), initialExcludeText);
+});
+
 test("existing user config and token files are preserved via backups before overwrite", async () => {
   const scenario = await createInstallScenario("backup", {
     apiKey: "gp-new-key-999999",
@@ -205,29 +234,33 @@ test("prepare failures stop before repo exclusion and managed file writes begin"
   let writeCount = 0;
 
   const dependencies = scenario.createDependencies({
-    ensureLocalProjectConfigExcluded: async (configInspection) => {
-      excludeCount += 1;
-      return baseDependencies.ensureLocalProjectConfigExcluded(
-        configInspection,
-      );
+    commit: {
+      ensureLocalProjectConfigExcluded: async (configInspection) => {
+        excludeCount += 1;
+        return baseDependencies.commit.ensureLocalProjectConfigExcluded(
+          configInspection,
+        );
+      },
+      writeManagedTextFile: async () => {
+        writeCount += 1;
+        throw new Error("write should not be attempted");
+      },
     },
-    loadTomlConfig: async (filePath) => {
-      loadCount += 1;
+    planning: {
+      loadTomlConfig: async (filePath) => {
+        loadCount += 1;
 
-      if (loadCount === 1) {
-        return {
-          exists: false,
-          filePath,
-          settings: {},
-          text: "",
-        };
-      }
+        if (loadCount === 1) {
+          return {
+            exists: false,
+            filePath,
+            settings: {},
+            text: "",
+          };
+        }
 
-      throw new Error("project config is invalid");
-    },
-    writeManagedTextFile: async () => {
-      writeCount += 1;
-      throw new Error("write should not be attempted");
+        throw new Error("project config is invalid");
+      },
     },
   });
 
@@ -267,12 +300,18 @@ test("commit failures roll back completed managed writes and preserve prior file
 
   const failingUserConfigPath = path.join(scenario.codexHome, "config.toml");
   const dependencies = scenario.createDependencies({
-    writeManagedTextFile: async (filePath, content, options) => {
-      if (filePath === failingUserConfigPath) {
-        throw new Error("simulated config write failure");
-      }
+    commit: {
+      writeManagedTextFile: async (filePath, content, options) => {
+        if (filePath === failingUserConfigPath) {
+          throw new Error("simulated config write failure");
+        }
 
-      return baseDependencies.writeManagedTextFile(filePath, content, options);
+        return baseDependencies.commit.writeManagedTextFile(
+          filePath,
+          content,
+          options,
+        );
+      },
     },
   });
 

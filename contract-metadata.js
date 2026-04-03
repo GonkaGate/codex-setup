@@ -1,4 +1,8 @@
 import packageJson from "./package.json" with { type: "json" };
+import {
+  SUPPORTED_MODELS_CONTRACT,
+  VERIFIED_CODEX_CONTRACT,
+} from "./contract-definitions.js";
 
 const [binName, binPath] = Object.entries(packageJson.bin ?? {})[0] ?? [];
 
@@ -12,18 +16,6 @@ export const CONTRACT_METADATA = {
   cliVersion: packageJson.version,
   packageName: packageJson.name,
   publicEntrypoint: `npx ${packageJson.name}`,
-  supportedModels: [
-    {
-      key: "gpt-5.4",
-      displayName: "GPT-5.4",
-      modelId: "gpt-5.4",
-      description: "Current validated GonkaGate model for Codex CLI.",
-      isDefault: true,
-    },
-  ],
-  verifiedCodex: {
-    minVersion: "0.118.0",
-    modelCatalogVersion: "rust-v0.118.0",
-    verifiedDate: "2026-04-02",
-  },
+  supportedModels: SUPPORTED_MODELS_CONTRACT,
+  verifiedCodex: VERIFIED_CODEX_CONTRACT,
 };

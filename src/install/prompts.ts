@@ -72,7 +72,7 @@ export function buildScopePromptConfig(
 }
 
 export function buildTrackedLocalConfigActionPromptConfig(
-  relativeConfigPath: string,
+  repoRelativeConfigPath: string,
 ): SelectPromptConfig<TrackedLocalConfigAction> {
   return buildNumberedSelectPromptConfig({
     choices: [
@@ -92,7 +92,7 @@ export function buildTrackedLocalConfigActionPromptConfig(
       },
     ],
     default: "user",
-    message: `${relativeConfigPath} is already tracked by git. How should the installer continue?`,
+    message: `${repoRelativeConfigPath} is already tracked by git. How should the installer continue?`,
     pageSize: 2,
   });
 }
@@ -100,7 +100,7 @@ export function buildTrackedLocalConfigActionPromptConfig(
 export async function promptForModel(
   models: readonly SupportedModel[],
   defaultModelKey: SupportedModelKey,
-  selectRunner: SelectPromptRunner<SupportedModelKey> = defaultModelSelectRunner,
+  injectedSelectRunner?: SelectPromptRunner<SupportedModelKey>,
 ): Promise<SupportedModel> {
   if (models.length === 1) {
     return models[0];
@@ -108,36 +108,31 @@ export async function promptForModel(
 
   const selectedModelKey = await runSelectPrompt(
     buildModelPromptConfig(models, defaultModelKey),
-    selectRunner,
-    {
-      requireTty: shouldRequireTty(selectRunner, defaultModelSelectRunner),
-    },
+    defaultModelSelectRunner,
+    injectedSelectRunner,
   );
   return requireModel(models, selectedModelKey);
 }
 
 export async function promptForScope(
   defaultScope: InstallScope,
-  selectRunner: SelectPromptRunner<InstallScope> = defaultScopeSelectRunner,
+  injectedSelectRunner?: SelectPromptRunner<InstallScope>,
 ): Promise<InstallScope> {
-  return runSelectPrompt(buildScopePromptConfig(defaultScope), selectRunner, {
-    requireTty: shouldRequireTty(selectRunner, defaultScopeSelectRunner),
-  });
+  return runSelectPrompt(
+    buildScopePromptConfig(defaultScope),
+    defaultScopeSelectRunner,
+    injectedSelectRunner,
+  );
 }
 
 export async function promptForTrackedLocalConfigAction(
-  relativeConfigPath: string,
-  selectRunner: SelectPromptRunner<TrackedLocalConfigAction> = defaultTrackedLocalConfigActionSelectRunner,
+  repoRelativeConfigPath: string,
+  injectedSelectRunner?: SelectPromptRunner<TrackedLocalConfigAction>,
 ): Promise<TrackedLocalConfigAction> {
   return runSelectPrompt(
-    buildTrackedLocalConfigActionPromptConfig(relativeConfigPath),
-    selectRunner,
-    {
-      requireTty: shouldRequireTty(
-        selectRunner,
-        defaultTrackedLocalConfigActionSelectRunner,
-      ),
-    },
+    buildTrackedLocalConfigActionPromptConfig(repoRelativeConfigPath),
+    defaultTrackedLocalConfigActionSelectRunner,
+    injectedSelectRunner,
   );
 }
 
@@ -178,21 +173,15 @@ function buildNumberedSelectPromptConfig<Value>(
 
 async function runSelectPrompt<Value>(
   config: SelectPromptConfig<Value>,
-  selectRunner: SelectPromptRunner<Value>,
-  options: { requireTty?: boolean } = {},
+  defaultSelectRunner: SelectPromptRunner<Value>,
+  injectedSelectRunner?: SelectPromptRunner<Value>,
 ): Promise<Value> {
-  if (options.requireTty ?? true) {
+  if (!injectedSelectRunner) {
     assertInteractiveTty();
   }
 
+  const selectRunner = injectedSelectRunner ?? defaultSelectRunner;
   return selectRunner(config).catch(rethrowPromptExit);
-}
-
-function shouldRequireTty<Value>(
-  selectRunner: SelectPromptRunner<Value>,
-  defaultSelectRunner: SelectPromptRunner<Value>,
-): boolean {
-  return selectRunner === defaultSelectRunner;
 }
 
 function rethrowPromptExit(error: unknown): never {

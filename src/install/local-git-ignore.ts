@@ -1,30 +1,32 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildBackupGlob } from "./backup.js";
-import type { LocalProjectConfigIgnoreTarget } from "./local-project-config.js";
+import type { LocalProjectConfigExcludeTarget } from "./local-project-config.js";
 import { isMissingFileError } from "./error-codes.js";
 
-export async function ensureLocalProjectConfigIgnored(
-  ignoreTarget: LocalProjectConfigIgnoreTarget | undefined,
+export async function ensureLocalProjectConfigExcluded(
+  excludeTarget: LocalProjectConfigExcludeTarget | undefined,
 ): Promise<void> {
-  if (!ignoreTarget) {
+  if (!excludeTarget) {
     return;
   }
 
-  await ensureConfigPathIgnoredInRepository(
-    ignoreTarget.gitDir,
-    ignoreTarget.relativeConfigPath,
+  await ensureRepoPathExcluded(
+    excludeTarget.gitDir,
+    excludeTarget.repoRelativeConfigPath,
   );
 }
 
-async function ensureConfigPathIgnoredInRepository(
+async function ensureRepoPathExcluded(
   gitDir: string,
-  relativeConfigPath: string,
+  repoRelativeConfigPath: string,
 ): Promise<void> {
-  const normalizedRelativePath = relativeConfigPath.split(path.sep).join("/");
-  const ignoreEntries = [
-    `/${normalizedRelativePath}`,
-    buildBackupGlob(`/${normalizedRelativePath}`),
+  const normalizedRepoRelativePath = repoRelativeConfigPath
+    .split(path.sep)
+    .join("/");
+  const entriesToEnsure = [
+    `/${normalizedRepoRelativePath}`,
+    buildBackupGlob(`/${normalizedRepoRelativePath}`),
   ];
   const excludePath = path.join(gitDir, "info", "exclude");
   const existingContent = await readOptionalFile(excludePath);
@@ -35,7 +37,7 @@ async function ensureConfigPathIgnoredInRepository(
       .filter((line) => line.length > 0 && !line.startsWith("#")),
   );
 
-  const missingEntries = ignoreEntries.filter(
+  const missingEntries = entriesToEnsure.filter(
     (ignoreEntry) => !existingEntries.has(ignoreEntry),
   );
 
@@ -44,13 +46,11 @@ async function ensureConfigPathIgnoredInRepository(
   }
 
   await mkdir(path.dirname(excludePath), { recursive: true });
-
-  const nextContent =
-    existingContent.length === 0
-      ? `${missingEntries.join("\n")}\n`
-      : `${existingContent}${existingContent.endsWith("\n") ? "" : "\n"}${missingEntries.join("\n")}\n`;
-
-  await writeFile(excludePath, nextContent, "utf8");
+  await writeFile(
+    excludePath,
+    appendIgnoreEntries(existingContent, missingEntries),
+    "utf8",
+  );
 }
 
 async function readOptionalFile(filePath: string): Promise<string> {
@@ -64,4 +64,16 @@ async function readOptionalFile(filePath: string): Promise<string> {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to read ${filePath}: ${message}`);
   }
+}
+
+function appendIgnoreEntries(
+  existingContent: string,
+  entries: readonly string[],
+): string {
+  if (existingContent.length === 0) {
+    return `${entries.join("\n")}\n`;
+  }
+
+  const separator = existingContent.endsWith("\n") ? "" : "\n";
+  return `${existingContent}${separator}${entries.join("\n")}\n`;
 }

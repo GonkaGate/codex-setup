@@ -1,6 +1,6 @@
 import { createBackup } from "./backup.js";
 import { checkCodexAvailable } from "./codex-command.js";
-import { ensureLocalProjectConfigIgnored } from "./local-git-ignore.js";
+import { ensureLocalProjectConfigExcluded } from "./local-git-ignore.js";
 import { inspectLocalProjectConfig } from "./local-project-config.js";
 import {
   promptForApiKey,
@@ -34,7 +34,7 @@ export interface InstallPlanningDependencies {
 
 export interface InstallCommitDependencies {
   createBackup: typeof createBackup;
-  ensureLocalProjectConfigIgnored: typeof ensureLocalProjectConfigIgnored;
+  ensureLocalProjectConfigExcluded: typeof ensureLocalProjectConfigExcluded;
   rollbackManagedTextFile: typeof rollbackManagedTextFile;
   writeManagedTextFile: typeof writeManagedTextFile;
 }
@@ -70,7 +70,7 @@ const defaultInstallPlanningDependencies = {
 
 const defaultInstallCommitDependencies = {
   createBackup,
-  ensureLocalProjectConfigIgnored,
+  ensureLocalProjectConfigExcluded,
   rollbackManagedTextFile,
   writeManagedTextFile,
 } satisfies InstallCommitDependencies;

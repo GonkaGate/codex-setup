@@ -1,11 +1,13 @@
 import { execFile } from "node:child_process";
+import { lstat } from "node:fs/promises";
+import path from "node:path";
 import { promisify } from "node:util";
-import { hasErrorCode } from "./error-codes.js";
-import type { GitContext } from "./git-context.js";
 import {
-  resolveRepositoryLocalProjectConfigLocation,
-  type RepositoryLocalProjectConfigLocation,
-} from "./local-project-config-target.js";
+  findGitContext,
+  requireRepoRelativePath,
+  type GitContext,
+} from "./git-context.js";
+import { hasErrorCode, isMissingFileError } from "./error-codes.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -16,19 +18,19 @@ export interface OutsideRepositoryLocalProjectConfigInspection {
 export interface TrackedLocalProjectConfigInspection {
   gitContext: GitContext;
   kind: "tracked";
-  relativeConfigPath: string;
+  repoRelativeConfigPath: string;
 }
 
 export interface UntrackedLocalProjectConfigInspection {
-  ignoreTarget: LocalProjectConfigIgnoreTarget;
+  excludeTarget: LocalProjectConfigExcludeTarget;
   gitContext: GitContext;
   kind: "untracked";
-  relativeConfigPath: string;
+  repoRelativeConfigPath: string;
 }
 
-export interface LocalProjectConfigIgnoreTarget {
+export interface LocalProjectConfigExcludeTarget {
   gitDir: string;
-  relativeConfigPath: string;
+  repoRelativeConfigPath: string;
 }
 
 export type LocalProjectConfigInspection =
@@ -39,51 +41,82 @@ export type LocalProjectConfigInspection =
 export async function inspectLocalProjectConfig(
   projectConfigPath: string,
 ): Promise<LocalProjectConfigInspection> {
-  const localConfigLocation =
-    await resolveRepositoryLocalProjectConfigLocation(projectConfigPath);
+  const repoProjectConfigPath =
+    await resolveRepositoryProjectConfigPath(projectConfigPath);
 
-  if (!localConfigLocation) {
+  if (!repoProjectConfigPath) {
     return {
       kind: "outside_repo",
     };
   }
 
-  const isTracked = await isRepositoryPathTracked(
-    localConfigLocation.relativeConfigPath,
-    localConfigLocation.gitContext.repoRoot,
+  const trackedByGit = await isRepoPathTracked(
+    repoProjectConfigPath.repoRelativeConfigPath,
+    repoProjectConfigPath.gitContext.repoRoot,
   );
 
-  if (isTracked) {
+  if (trackedByGit) {
     return {
-      ...localConfigLocation,
+      ...repoProjectConfigPath,
       kind: "tracked",
     };
   }
 
   return {
-    ...localConfigLocation,
-    ignoreTarget: buildLocalProjectConfigIgnoreTarget(localConfigLocation),
+    ...repoProjectConfigPath,
+    excludeTarget: createLocalProjectConfigExcludeTarget(repoProjectConfigPath),
     kind: "untracked",
   };
 }
 
-function buildLocalProjectConfigIgnoreTarget(
-  localConfigLocation: RepositoryLocalProjectConfigLocation,
-): LocalProjectConfigIgnoreTarget {
+interface RepositoryProjectConfigPath {
+  gitContext: GitContext;
+  repoRelativeConfigPath: string;
+}
+
+async function resolveRepositoryProjectConfigPath(
+  projectConfigPath: string,
+): Promise<RepositoryProjectConfigPath | null> {
+  const gitContext = await findGitContext(path.dirname(projectConfigPath));
+  await assertSafeProjectConfigPath(projectConfigPath, gitContext?.repoRoot);
+
+  if (!gitContext) {
+    return null;
+  }
+
   return {
-    gitDir: localConfigLocation.gitContext.gitDir,
-    relativeConfigPath: localConfigLocation.relativeConfigPath,
+    gitContext,
+    repoRelativeConfigPath: requireRepoRelativePath(
+      projectConfigPath,
+      gitContext.repoRoot,
+    ),
   };
 }
 
-async function isRepositoryPathTracked(
-  relativeConfigPath: string,
+function createLocalProjectConfigExcludeTarget(
+  repoProjectConfigPath: RepositoryProjectConfigPath,
+): LocalProjectConfigExcludeTarget {
+  return {
+    gitDir: repoProjectConfigPath.gitContext.gitDir,
+    repoRelativeConfigPath: repoProjectConfigPath.repoRelativeConfigPath,
+  };
+}
+
+async function isRepoPathTracked(
+  repoRelativeConfigPath: string,
   repoRoot: string,
 ): Promise<boolean> {
   try {
     await execFileAsync(
       "git",
-      ["-C", repoRoot, "ls-files", "--error-unmatch", "--", relativeConfigPath],
+      [
+        "-C",
+        repoRoot,
+        "ls-files",
+        "--error-unmatch",
+        "--",
+        repoRelativeConfigPath,
+      ],
       {
         encoding: "utf8",
       },
@@ -102,4 +135,82 @@ async function isRepositoryPathTracked(
 
     throw error;
   }
+}
+
+async function assertSafeProjectConfigPath(
+  projectConfigPath: string,
+  repoRoot?: string,
+): Promise<void> {
+  const pathsToInspect = repoRoot
+    ? listPathsBetweenRepoRootAndConfig(repoRoot, projectConfigPath)
+    : [path.dirname(projectConfigPath), projectConfigPath];
+
+  for (const pathToInspect of pathsToInspect) {
+    await assertPathIsNotSymlink(
+      pathToInspect,
+      buildSymlinkErrorMessage(pathToInspect, projectConfigPath, repoRoot),
+    );
+  }
+}
+
+async function assertPathIsNotSymlink(
+  filePath: string,
+  errorMessage: string,
+): Promise<void> {
+  try {
+    const fileStats = await lstat(filePath);
+
+    if (fileStats.isSymbolicLink()) {
+      throw new Error(errorMessage);
+    }
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
+// Walk every path component between the repo root and the config file so local
+// scope cannot write through a symlinked intermediate directory.
+function listPathsBetweenRepoRootAndConfig(
+  repoRoot: string,
+  projectConfigPath: string,
+): string[] {
+  const repoRelativeConfigPath = requireRepoRelativePath(
+    projectConfigPath,
+    repoRoot,
+  );
+  const targetSegments = repoRelativeConfigPath
+    .split(path.sep)
+    .filter((segment) => segment.length > 0);
+  const pathsToInspect = [repoRoot];
+  let currentPath = repoRoot;
+
+  for (const segment of targetSegments) {
+    currentPath = path.join(currentPath, segment);
+    pathsToInspect.push(currentPath);
+  }
+
+  return pathsToInspect;
+}
+
+function buildSymlinkErrorMessage(
+  pathToInspect: string,
+  projectConfigPath: string,
+  repoRoot?: string,
+): string {
+  if (pathToInspect === path.dirname(projectConfigPath)) {
+    return 'Refusing to write local Codex config into a symlinked ".codex" directory.';
+  }
+
+  if (pathToInspect === projectConfigPath) {
+    return "Refusing to overwrite local Codex config through a symlinked file.";
+  }
+
+  const label = repoRoot
+    ? path.relative(repoRoot, pathToInspect) || path.basename(pathToInspect)
+    : pathToInspect;
+  return `Refusing local Codex setup through a symlinked path component: ${label}.`;
 }

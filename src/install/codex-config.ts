@@ -6,18 +6,15 @@ import {
   TOKEN_REFRESH_INTERVAL_MS,
 } from "../constants/gateway.js";
 import type { SupportedModel } from "../constants/models.js";
-import type { InstallPaths } from "./settings-paths.js";
-import type {
-  ConfigLayerRole,
-  ConfigLayerTarget,
-  ScopeConfigLayer,
-} from "./install-scope.js";
+import type { InstallPaths, InstallScope } from "./settings-paths.js";
 import {
   mergeTomlTables,
   type LoadedTomlConfig,
   type TomlTable,
 } from "./toml-config.js";
 import type { TokenCommandConfig } from "./token-helper.js";
+
+export type ConfigTarget = "user" | "project";
 
 export type ConfigPatchPaths = Pick<
   InstallPaths,
@@ -31,25 +28,25 @@ type ConfigFilePaths = Pick<
 
 type InstallConfigPaths = ConfigPatchPaths & ConfigFilePaths;
 
-export interface PlannedConfigTarget {
+export interface PlannedConfigWrite {
   config: TomlTable;
-  target: ConfigLayerTarget;
-}
-
-export interface PlannedConfigWrite extends PlannedConfigTarget {
   filePath: string;
+  target: ConfigTarget;
 }
 
 export interface BuildInstallConfigPlanInput {
-  configLayers: readonly ScopeConfigLayer[];
-  currentConfigsByTarget: Partial<Record<ConfigLayerTarget, TomlTable>>;
-  paths: ConfigPatchPaths;
+  existingConfigs: {
+    projectConfig?: TomlTable;
+    userConfig: TomlTable;
+  };
+  finalScope: InstallScope;
+  paths: InstallConfigPaths;
   selectedModel: SupportedModel;
   tokenCommand: TokenCommandConfig;
 }
 
 export interface PlanInstallConfigWritesInput {
-  configLayers: readonly ScopeConfigLayer[];
+  finalScope: InstallScope;
   loadTomlConfig: (filePath: string) => Promise<LoadedTomlConfig>;
   paths: InstallConfigPaths;
   selectedModel: SupportedModel;
@@ -59,134 +56,126 @@ export interface PlanInstallConfigWritesInput {
 export async function planInstallConfigWrites(
   input: PlanInstallConfigWritesInput,
 ): Promise<PlannedConfigWrite[]> {
-  const currentConfigsByTarget = await loadCurrentConfigsByTarget(
-    input.configLayers,
+  const existingConfigs = await loadExistingConfigsForScope(
+    input.finalScope,
     input.paths,
     input.loadTomlConfig,
   );
 
   return buildInstallConfigPlan({
-    configLayers: input.configLayers,
-    currentConfigsByTarget,
+    existingConfigs,
+    finalScope: input.finalScope,
     paths: input.paths,
     selectedModel: input.selectedModel,
     tokenCommand: input.tokenCommand,
-  }).map((plannedConfig) => ({
-    ...plannedConfig,
-    filePath: resolveTargetConfigPath(plannedConfig.target, input.paths),
-  }));
+  });
 }
 
 export function buildInstallConfigPlan(
   input: BuildInstallConfigPlanInput,
-): PlannedConfigTarget[] {
-  const targetsInWriteOrder = listConfigTargetsInWriteOrder(input.configLayers);
-  const mergedConfigsByTarget = initializeMergedConfigsByTarget(
-    targetsInWriteOrder,
-    input.currentConfigsByTarget,
-  );
-
-  for (const configLayer of input.configLayers) {
-    const currentConfig = mergedConfigsByTarget[configLayer.target] ?? {};
-    mergedConfigsByTarget[configLayer.target] = mergeTomlTables(
-      currentConfig,
-      buildPatchForLayer(configLayer, input),
-    );
+): PlannedConfigWrite[] {
+  if (input.finalScope === "user") {
+    return [
+      createConfigWrite(
+        "user",
+        input.paths.userConfigPath,
+        mergeTomlTables(
+          input.existingConfigs.userConfig,
+          buildUserScopeConfigPatch(input),
+        ),
+      ),
+    ];
   }
 
-  return targetsInWriteOrder.map((target) => ({
-    config: mergedConfigsByTarget[target] ?? {},
-    target,
-  }));
+  return [
+    createConfigWrite(
+      "user",
+      input.paths.userConfigPath,
+      mergeTomlTables(
+        input.existingConfigs.userConfig,
+        buildLocalScopeUserConfigPatch(input),
+      ),
+    ),
+    createConfigWrite(
+      "project",
+      input.paths.projectConfigPath,
+      mergeTomlTables(
+        input.existingConfigs.projectConfig ?? {},
+        buildLocalScopeProjectConfigPatch(input),
+      ),
+    ),
+  ];
 }
 
-async function loadCurrentConfigsByTarget(
-  configLayers: readonly ScopeConfigLayer[],
-  paths: ConfigFilePaths,
+async function loadExistingConfigsForScope(
+  finalScope: InstallScope,
+  paths: InstallConfigPaths,
   loadTomlConfig: (filePath: string) => Promise<LoadedTomlConfig>,
-): Promise<Partial<Record<ConfigLayerTarget, TomlTable>>> {
-  const currentConfigsByTarget: Partial<Record<ConfigLayerTarget, TomlTable>> =
-    {};
+): Promise<BuildInstallConfigPlanInput["existingConfigs"]> {
+  const userConfig = (await loadTomlConfig(paths.userConfigPath)).settings;
 
-  for (const target of listConfigTargetsInWriteOrder(configLayers)) {
-    const filePath = resolveTargetConfigPath(target, paths);
-    currentConfigsByTarget[target] = (await loadTomlConfig(filePath)).settings;
+  if (finalScope !== "local") {
+    return {
+      userConfig,
+    };
   }
 
-  return currentConfigsByTarget;
+  return {
+    projectConfig: (await loadTomlConfig(paths.projectConfigPath)).settings,
+    userConfig,
+  };
 }
 
-function initializeMergedConfigsByTarget(
-  targetsInWriteOrder: readonly ConfigLayerTarget[],
-  currentConfigsByTarget: Partial<Record<ConfigLayerTarget, TomlTable>>,
-): Partial<Record<ConfigLayerTarget, TomlTable>> {
-  const mergedConfigsByTarget: Partial<Record<ConfigLayerTarget, TomlTable>> =
-    {};
-
-  for (const target of targetsInWriteOrder) {
-    mergedConfigsByTarget[target] = currentConfigsByTarget[target] ?? {};
-  }
-
-  return mergedConfigsByTarget;
+function createConfigWrite(
+  target: ConfigTarget,
+  filePath: string,
+  config: TomlTable,
+): PlannedConfigWrite {
+  return {
+    config,
+    filePath,
+    target,
+  };
 }
 
-function listConfigTargetsInWriteOrder(
-  configLayers: readonly ScopeConfigLayer[],
-): ConfigLayerTarget[] {
-  const targetsInWriteOrder: ConfigLayerTarget[] = [];
-
-  for (const configLayer of configLayers) {
-    if (!targetsInWriteOrder.includes(configLayer.target)) {
-      targetsInWriteOrder.push(configLayer.target);
-    }
-  }
-
-  return targetsInWriteOrder;
-}
-
-function buildPatchForLayer(
-  configLayer: ScopeConfigLayer,
+function buildUserScopeConfigPatch(
   input: Pick<
     BuildInstallConfigPlanInput,
     "paths" | "selectedModel" | "tokenCommand"
   >,
 ): TomlTable {
-  let patch: TomlTable = {};
-
-  for (const role of configLayer.roles) {
-    patch = mergeTomlTables(patch, buildPatchForRole(role, input));
-  }
-
-  return patch;
+  return mergeConfigPatches(
+    buildActivationConfigPatch(input.selectedModel, input.paths),
+    buildProviderConfigPatch(input.paths, input.tokenCommand),
+  );
 }
 
-function resolveTargetConfigPath(
-  target: ConfigLayerTarget,
-  paths: ConfigFilePaths,
-): string {
-  switch (target) {
-    case "project":
-      return paths.projectConfigPath;
-    case "user":
-      return paths.userConfigPath;
-  }
-}
-
-function buildPatchForRole(
-  role: ConfigLayerRole,
+function buildLocalScopeUserConfigPatch(
   input: Pick<
     BuildInstallConfigPlanInput,
     "paths" | "selectedModel" | "tokenCommand"
   >,
 ): TomlTable {
-  switch (role) {
-    case "activation":
-      return buildActivationConfigPatch(input.selectedModel, input.paths);
-    case "provider":
-      return buildProviderConfigPatch(input.paths, input.tokenCommand);
-    case "trust":
-      return buildTrustConfigPatch(input.paths.projectRoot);
+  return mergeConfigPatches(
+    buildProviderConfigPatch(input.paths, input.tokenCommand),
+    buildTrustConfigPatch(input.paths.projectRoot),
+  );
+}
+
+function buildLocalScopeProjectConfigPatch(
+  input: Pick<BuildInstallConfigPlanInput, "paths" | "selectedModel">,
+): TomlTable {
+  return buildActivationConfigPatch(input.selectedModel, input.paths);
+}
+
+function mergeConfigPatches(...patches: readonly TomlTable[]): TomlTable {
+  let mergedPatch: TomlTable = {};
+
+  for (const patch of patches) {
+    mergedPatch = mergeTomlTables(mergedPatch, patch);
   }
+
+  return mergedPatch;
 }
 
 function buildActivationConfigPatch(

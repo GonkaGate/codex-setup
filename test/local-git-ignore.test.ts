@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { ensureLocalProjectConfigIgnored } from "../src/install/local-git-ignore.js";
+import { ensureLocalProjectConfigExcluded } from "../src/install/local-git-ignore.js";
 import { inspectLocalProjectConfig } from "../src/install/local-project-config.js";
 import {
   createTempWorkspace,
@@ -36,7 +36,7 @@ test("inspectLocalProjectConfig classifies tracked and untracked repo configs", 
   assert.equal(configInspection.kind, "tracked");
 });
 
-test("ensureLocalProjectConfigIgnored surfaces exclude read errors", async () => {
+test("ensureLocalProjectConfigExcluded surfaces exclude read errors", async () => {
   const workspace = await createTempWorkspace("codex-setup-git-exclude");
   initGitRepo(workspace);
 
@@ -54,12 +54,12 @@ test("ensureLocalProjectConfigIgnored surfaces exclude read errors", async () =>
   assert.equal(configInspection.kind, "untracked");
 
   await assert.rejects(
-    () => ensureLocalProjectConfigIgnored(configInspection.ignoreTarget),
+    () => ensureLocalProjectConfigExcluded(configInspection.excludeTarget),
     /Failed to read .*\.git\/info\/exclude/,
   );
 });
 
-test("ensureLocalProjectConfigIgnored is a no-op for tracked and outside-repo configs", async () => {
+test("ensureLocalProjectConfigExcluded is a no-op for tracked and outside-repo configs", async () => {
   const outsideWorkspace = await createTempWorkspace(
     "codex-setup-outside-git-noop",
   );
@@ -67,7 +67,7 @@ test("ensureLocalProjectConfigIgnored is a no-op for tracked and outside-repo co
     path.join(outsideWorkspace, ".codex", "config.toml"),
   );
   assert.equal(outsideInspection.kind, "outside_repo");
-  await assert.doesNotReject(() => ensureLocalProjectConfigIgnored(undefined));
+  await assert.doesNotReject(() => ensureLocalProjectConfigExcluded(undefined));
 
   const workspace = await createTempWorkspace("codex-setup-git-exclude-noop");
   initGitRepo(workspace);
@@ -82,7 +82,7 @@ test("ensureLocalProjectConfigIgnored is a no-op for tracked and outside-repo co
   await writeFile(excludePath, "# existing\n", "utf8");
   const initialExcludeText = await readFile(excludePath, "utf8");
 
-  await assert.doesNotReject(() => ensureLocalProjectConfigIgnored(undefined));
+  await assert.doesNotReject(() => ensureLocalProjectConfigExcluded(undefined));
   assert.equal(await readFile(excludePath, "utf8"), initialExcludeText);
 });
 

@@ -4,11 +4,11 @@ import {
 } from "../constants/models.js";
 import {
   planInstallConfigWrites,
+  type ConfigTarget,
   type PlannedConfigWrite,
 } from "./codex-config.js";
 import { OWNER_READ_WRITE_MODE } from "./file-permissions.js";
-import type { ConfigLayerTarget, ScopeConfigLayer } from "./install-scope.js";
-import type { InstallPaths } from "./settings-paths.js";
+import type { InstallPaths, InstallScope } from "./settings-paths.js";
 import {
   createManagedTomlConfigWrite,
   type LoadedTomlConfig,
@@ -16,137 +16,137 @@ import {
 import type { TokenCommandConfig } from "./token-helper.js";
 import type { ManagedTextComparator } from "./write-managed-file.js";
 
-export type PlannedManagedWriteKind =
+export type ManagedWriteKind =
   | "token"
   | "token_helper"
   | "model_catalog"
   | "project_config"
   | "user_config";
 
-export type PlannedManagedWritePhaseName = "catalog" | "config" | "credentials";
+export type InstallWritePhaseName = "catalog" | "config" | "credentials";
 
-export interface PlannedManagedWrite {
+export interface ManagedWritePlan {
   content: string;
   contentComparator?: ManagedTextComparator;
   filePath: string;
-  kind: PlannedManagedWriteKind;
+  kind: ManagedWriteKind;
   mode: number;
 }
 
-export interface PlannedManagedWritePhase {
-  name: PlannedManagedWritePhaseName;
-  writes: readonly PlannedManagedWrite[];
+export interface InstallWritePhase {
+  name: InstallWritePhaseName;
+  writes: readonly ManagedWritePlan[];
 }
 
 export interface PlanInstallManagedWritesInput {
   apiKey: string;
-  configLayers: readonly ScopeConfigLayer[];
+  finalScope: InstallScope;
   installPaths: InstallPaths;
   loadTomlConfig: (filePath: string) => Promise<LoadedTomlConfig>;
   selectedModel: SupportedModel;
   tokenCommand: TokenCommandConfig;
 }
 
-const CONFIG_WRITE_KIND_BY_TARGET = {
+const CONFIG_FILE_KIND_BY_TARGET = {
   project: "project_config",
   user: "user_config",
-} as const satisfies Record<ConfigLayerTarget, PlannedManagedWriteKind>;
+} as const satisfies Record<ConfigTarget, ManagedWriteKind>;
 
 export async function planInstallManagedWrites(
   input: PlanInstallManagedWritesInput,
-): Promise<PlannedManagedWrite[]> {
-  const phases = await planInstallManagedWritePhases(input);
-  return phases.flatMap((phase) => phase.writes);
+): Promise<ManagedWritePlan[]> {
+  return (await planInstallManagedWritePhases(input)).flatMap(
+    (phase) => phase.writes,
+  );
 }
 
 export async function planInstallManagedWritePhases(
   input: PlanInstallManagedWritesInput,
-): Promise<PlannedManagedWritePhase[]> {
+): Promise<InstallWritePhase[]> {
+  // Commit and rollback semantics depend on this phase sequence staying explicit.
   return [
-    {
-      name: "credentials",
-      writes: [planTokenManagedWrite(input), planHelperManagedWrite(input)],
-    },
-    {
-      name: "catalog",
-      writes: [planModelCatalogManagedWrite(input)],
-    },
-    // Commit and rollback semantics depend on this phase sequence staying explicit.
-    {
-      name: "config",
-      writes: await planConfigManagedWrites(input),
-    },
+    planCredentialWritePhase(input),
+    planCatalogWritePhase(input),
+    await planConfigWritePhase(input),
   ];
 }
 
-function planTokenManagedWrite(
-  context: PlanInstallManagedWritesInput,
-): PlannedManagedWrite {
-  return createManagedWritePlan(
-    "token",
-    context.installPaths.tokenPath,
-    `${context.apiKey}\n`,
-    OWNER_READ_WRITE_MODE,
-  );
-}
-
-function planHelperManagedWrite(
-  context: PlanInstallManagedWritesInput,
-): PlannedManagedWrite {
-  return createManagedWritePlan(
-    "token_helper",
-    context.tokenCommand.helperFilePath,
-    context.tokenCommand.content,
-    context.tokenCommand.fileMode,
-  );
-}
-
-function planModelCatalogManagedWrite(
-  context: PlanInstallManagedWritesInput,
-): PlannedManagedWrite {
-  return createManagedWritePlan(
-    "model_catalog",
-    context.installPaths.modelCatalogPath,
-    `${JSON.stringify(createCuratedModelCatalog(), null, 2)}\n`,
-    OWNER_READ_WRITE_MODE,
-  );
-}
-
-async function planConfigManagedWrites(
+function planCredentialWritePhase(
   input: PlanInstallManagedWritesInput,
-): Promise<PlannedManagedWrite[]> {
-  const plannedConfigWrites = await planInstallConfigWrites({
-    configLayers: input.configLayers,
+): InstallWritePhase {
+  return {
+    name: "credentials",
+    writes: [
+      createWritePlan(
+        "token",
+        input.installPaths.tokenPath,
+        `${input.apiKey}\n`,
+        OWNER_READ_WRITE_MODE,
+      ),
+      createWritePlan(
+        "token_helper",
+        input.tokenCommand.helperFilePath,
+        input.tokenCommand.content,
+        input.tokenCommand.fileMode,
+      ),
+    ],
+  };
+}
+
+function planCatalogWritePhase(
+  input: PlanInstallManagedWritesInput,
+): InstallWritePhase {
+  return {
+    name: "catalog",
+    writes: [
+      createWritePlan(
+        "model_catalog",
+        input.installPaths.modelCatalogPath,
+        `${JSON.stringify(createCuratedModelCatalog(), null, 2)}\n`,
+        OWNER_READ_WRITE_MODE,
+      ),
+    ],
+  };
+}
+
+async function planConfigWritePhase(
+  input: PlanInstallManagedWritesInput,
+): Promise<InstallWritePhase> {
+  const configWrites = await planInstallConfigWrites({
+    finalScope: input.finalScope,
     loadTomlConfig: input.loadTomlConfig,
     paths: input.installPaths,
     selectedModel: input.selectedModel,
     tokenCommand: input.tokenCommand,
   });
 
-  return plannedConfigWrites.map((entry) => prepareTomlConfigWrite(entry));
+  return {
+    name: "config",
+    writes: configWrites.map(toManagedConfigWrite),
+  };
 }
 
-function prepareTomlConfigWrite(
-  entry: PlannedConfigWrite,
-): PlannedManagedWrite {
-  const managedTomlWrite = createManagedTomlConfigWrite(entry.config);
+function toManagedConfigWrite(
+  configWrite: PlannedConfigWrite,
+): ManagedWritePlan {
+  const managedTomlWrite = createManagedTomlConfigWrite(configWrite.config);
 
-  return createManagedWritePlan(
-    CONFIG_WRITE_KIND_BY_TARGET[entry.target],
-    entry.filePath,
+  return createWritePlan(
+    CONFIG_FILE_KIND_BY_TARGET[configWrite.target],
+    configWrite.filePath,
     managedTomlWrite.content,
     OWNER_READ_WRITE_MODE,
     managedTomlWrite.contentComparator,
   );
 }
 
-function createManagedWritePlan(
-  kind: PlannedManagedWriteKind,
+function createWritePlan(
+  kind: ManagedWriteKind,
   filePath: string,
   content: string,
   mode: number,
   contentComparator?: ManagedTextComparator,
-): PlannedManagedWrite {
+): ManagedWritePlan {
   return {
     content,
     contentComparator,

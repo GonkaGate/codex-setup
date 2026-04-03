@@ -1,17 +1,9 @@
 import {
-  type LocalProjectConfigIgnoreTarget,
+  type LocalProjectConfigExcludeTarget,
   type LocalProjectConfigInspection,
 } from "./local-project-config.js";
 import type { TrackedLocalConfigAction } from "./prompts.js";
 import type { InstallPaths, InstallScope } from "./settings-paths.js";
-
-export type ConfigLayerTarget = "user" | "project";
-export type ConfigLayerRole = "activation" | "provider" | "trust";
-
-export interface ScopeConfigLayer {
-  roles: readonly ConfigLayerRole[];
-  target: ConfigLayerTarget;
-}
 
 export interface ScopeDetails {
   finalScope: InstallScope;
@@ -21,9 +13,8 @@ export interface ScopeDetails {
 }
 
 export interface ScopeResolution {
-  configLayers: readonly ScopeConfigLayer[];
   details: ScopeDetails;
-  localProjectConfigIgnoreTarget?: LocalProjectConfigIgnoreTarget;
+  localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget;
 }
 
 export interface ResolveInstallScopeInput {
@@ -32,33 +23,10 @@ export interface ResolveInstallScopeInput {
   ) => Promise<LocalProjectConfigInspection>;
   installPaths: Pick<InstallPaths, "projectConfigPath" | "projectRoot">;
   promptForTrackedLocalConfigAction: (
-    relativeConfigPath: string,
+    repoRelativeConfigPath: string,
   ) => Promise<TrackedLocalConfigAction>;
   requestedScope: InstallScope;
 }
-
-const USER_SCOPE_CONFIG_LAYERS = [
-  {
-    roles: ["activation", "provider"],
-    target: "user",
-  },
-] as const satisfies readonly ScopeConfigLayer[];
-
-const LOCAL_SCOPE_CONFIG_LAYERS = [
-  {
-    roles: ["provider", "trust"],
-    target: "user",
-  },
-  {
-    roles: ["activation"],
-    target: "project",
-  },
-] as const satisfies readonly ScopeConfigLayer[];
-
-const CONFIG_LAYERS_BY_SCOPE = {
-  local: LOCAL_SCOPE_CONFIG_LAYERS,
-  user: USER_SCOPE_CONFIG_LAYERS,
-} as const satisfies Record<InstallScope, readonly ScopeConfigLayer[]>;
 
 export async function resolveInstallScope(
   input: ResolveInstallScopeInput,
@@ -71,17 +39,24 @@ export async function resolveInstallScope(
     input.installPaths.projectConfigPath,
   );
 
+  return resolveLocalScopeRequest(projectConfigInspection, input);
+}
+
+async function resolveLocalScopeRequest(
+  projectConfigInspection: LocalProjectConfigInspection,
+  input: ResolveInstallScopeInput,
+): Promise<ScopeResolution> {
   switch (projectConfigInspection.kind) {
     case "outside_repo":
       return createLocalScopeResolution(input.installPaths);
     case "untracked":
       return createLocalScopeResolution(
         input.installPaths,
-        projectConfigInspection.ignoreTarget,
+        projectConfigInspection.excludeTarget,
       );
     case "tracked": {
       const action = await input.promptForTrackedLocalConfigAction(
-        projectConfigInspection.relativeConfigPath,
+        projectConfigInspection.repoRelativeConfigPath,
       );
 
       if (action === "user") {
@@ -91,12 +66,6 @@ export async function resolveInstallScope(
       throw new Error("Installation cancelled.");
     }
   }
-}
-
-export function getScopeConfigLayers(
-  scope: InstallScope,
-): readonly ScopeConfigLayer[] {
-  return CONFIG_LAYERS_BY_SCOPE[scope];
 }
 
 export function createUserScopeDetails(
@@ -123,20 +92,18 @@ function createUserScopeResolution(
   switchedToUserScope: boolean,
 ): ScopeResolution {
   return {
-    configLayers: getScopeConfigLayers("user"),
     details: createUserScopeDetails(switchedToUserScope),
   };
 }
 
 function createLocalScopeResolution(
   installPaths: Pick<InstallPaths, "projectConfigPath" | "projectRoot">,
-  localProjectConfigIgnoreTarget?: LocalProjectConfigIgnoreTarget,
+  localProjectConfigExcludeTarget?: LocalProjectConfigExcludeTarget,
 ): ScopeResolution {
   return {
-    configLayers: getScopeConfigLayers("local"),
     details: createLocalScopeDetails(installPaths),
-    ...(localProjectConfigIgnoreTarget
-      ? { localProjectConfigIgnoreTarget }
+    ...(localProjectConfigExcludeTarget
+      ? { localProjectConfigExcludeTarget }
       : {}),
   };
 }

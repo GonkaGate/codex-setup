@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DEFAULT_MODEL } from "../src/constants/models.js";
-import { getScopeConfigLayers } from "../src/install/install-scope.js";
 import {
   planInstallManagedWritePhases,
   planInstallManagedWrites,
-  type PlannedManagedWrite,
+  type ManagedWritePlan,
   type PlanInstallManagedWritesInput,
 } from "../src/install/install-managed-writes.js";
 import type {
@@ -40,7 +39,7 @@ function createPlanInput(
 ): PlanInstallManagedWritesInput {
   return {
     apiKey: "gp-test-key-123456",
-    configLayers: getScopeConfigLayers(finalScope),
+    finalScope,
     installPaths: testInstallPaths,
     loadTomlConfig: async (filePath) => createLoadedTomlConfig(filePath, {}),
     selectedModel: DEFAULT_MODEL,
@@ -61,7 +60,7 @@ function createLoadedTomlConfig(
 }
 
 function createWritePathMap(
-  writes: readonly PlannedManagedWrite[],
+  writes: readonly ManagedWritePlan[],
 ): Record<string, string> {
   return Object.fromEntries(
     writes.map((write) => [write.kind, write.filePath]),

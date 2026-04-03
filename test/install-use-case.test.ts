@@ -236,9 +236,9 @@ test("prepare failures stop before repo exclusion and managed file writes begin"
 
   const dependencies = scenario.createDependencies({
     commit: {
-      ensureLocalProjectConfigIgnored: async (configInspection) => {
+      ensureLocalProjectConfigExcluded: async (configInspection) => {
         excludeCount += 1;
-        return baseDependencies.commit.ensureLocalProjectConfigIgnored(
+        return baseDependencies.commit.ensureLocalProjectConfigExcluded(
           configInspection,
         );
       },

@@ -3,8 +3,8 @@ import {
   type InstallRollbackFailure,
 } from "./install-errors.js";
 import type {
-  PlannedManagedWrite,
-  PlannedManagedWritePhase,
+  InstallWritePhase,
+  ManagedWritePlan,
 } from "./install-managed-writes.js";
 import type { InstallCommitDependencies } from "./install-dependencies.js";
 import type { PreparedInstallPlan } from "./install-state.js";
@@ -20,10 +20,10 @@ export async function commitInstallPlan(
   const writes: ManagedWriteResult[] = [];
 
   try {
-    if (installPlan.context.localProjectConfigIgnoreTarget) {
-      // Keep the repo-local config ignored only once the install is ready to commit.
-      await dependencies.ensureLocalProjectConfigIgnored(
-        installPlan.context.localProjectConfigIgnoreTarget,
+    if (installPlan.context.localProjectConfigExcludeTarget) {
+      // Only update .git/info/exclude once the rest of the install is ready.
+      await dependencies.ensureLocalProjectConfigExcluded(
+        installPlan.context.localProjectConfigExcludeTarget,
       );
     }
 
@@ -42,7 +42,7 @@ export async function commitInstallPlan(
 }
 
 async function commitManagedWritePhase(
-  phase: PlannedManagedWritePhase,
+  phase: InstallWritePhase,
   dependencies: InstallCommitDependencies,
   completedWrites: ManagedWriteResult[],
 ): Promise<void> {
@@ -58,7 +58,7 @@ async function commitManagedWritePhase(
 }
 
 function createManagedWriteOptions(
-  plannedWrite: PlannedManagedWrite,
+  plannedWrite: ManagedWritePlan,
   createBackupForWrite: InstallCommitDependencies["createBackup"],
 ): ManagedWriteOptions {
   return {

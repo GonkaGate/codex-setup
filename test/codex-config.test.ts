@@ -10,7 +10,6 @@ import {
   planInstallConfigWrites,
   type ConfigPatchPaths,
 } from "../src/install/codex-config.js";
-import { getScopeConfigLayers } from "../src/install/install-scope.js";
 import {
   areEquivalentTomlTexts,
   createManagedTomlConfigWrite,
@@ -52,7 +51,7 @@ function createLoadedTomlConfig(
 
 test("planInstallConfigWrites keeps user scope config ownership centralized", async () => {
   const [userLayer] = await planInstallConfigWrites({
-    configLayers: getScopeConfigLayers("user"),
+    finalScope: "user",
     loadTomlConfig: async (filePath) =>
       createLoadedTomlConfig(
         filePath,
@@ -85,7 +84,7 @@ test("planInstallConfigWrites keeps user scope config ownership centralized", as
 
 test("planInstallConfigWrites splits local scope across user and project layers", async () => {
   const configPlan = await planInstallConfigWrites({
-    configLayers: getScopeConfigLayers("local"),
+    finalScope: "local",
     loadTomlConfig: async (filePath) =>
       createLoadedTomlConfig(
         filePath,
@@ -146,7 +145,7 @@ test("planInstallConfigWrites splits local scope across user and project layers"
 test("planInstallConfigWrites only loads config files for the active scope layers", async () => {
   const userScopeLoads: string[] = [];
   await planInstallConfigWrites({
-    configLayers: getScopeConfigLayers("user"),
+    finalScope: "user",
     loadTomlConfig: async (filePath) => {
       userScopeLoads.push(filePath);
       return createLoadedTomlConfig(filePath, {});
@@ -163,7 +162,7 @@ test("planInstallConfigWrites only loads config files for the active scope layer
 
   const localScopeLoads: string[] = [];
   await planInstallConfigWrites({
-    configLayers: getScopeConfigLayers("local"),
+    finalScope: "local",
     loadTomlConfig: async (filePath) => {
       localScopeLoads.push(filePath);
       return createLoadedTomlConfig(filePath, {});
@@ -182,94 +181,20 @@ test("planInstallConfigWrites only loads config files for the active scope layer
   ]);
 });
 
-test("buildInstallConfigPlan accumulates repeated layers for the same target", () => {
+test("buildInstallConfigPlan keeps pure config merging separate from file loading", () => {
   const [userLayer] = buildInstallConfigPlan({
-    configLayers: [
-      {
-        roles: ["provider"],
-        target: "user",
-      },
-      {
-        roles: ["activation"],
-        target: "user",
-      },
-    ],
-    currentConfigsByTarget: {
-      user: {
+    existingConfigs: {
+      userConfig: {
         analytics: {
           enabled: false,
         },
       },
     },
-    paths: testPaths,
-    selectedModel: DEFAULT_MODEL,
-    tokenCommand: testTokenCommand,
-  });
-
-  assert.equal(userLayer.target, "user");
-  assert.equal(
-    (userLayer.config.analytics as Record<string, unknown>).enabled,
-    false,
-  );
-  assert.equal(userLayer.config.model_provider, GONKAGATE_PROVIDER_ID);
-  assert.equal(userLayer.config.model, DEFAULT_MODEL.modelId);
-  assert.equal(userLayer.config.model_catalog_json, testPaths.modelCatalogPath);
-  assert.equal(
-    (
-      (userLayer.config.model_providers as Record<string, unknown>)[
-        GONKAGATE_PROVIDER_ID
-      ] as Record<string, unknown>
-    ).name,
-    GONKAGATE_PROVIDER_NAME,
-  );
-});
-
-test("planInstallConfigWrites loads each target once even when multiple layers share it", async () => {
-  const loadedFilePaths: string[] = [];
-
-  const [userLayer] = await planInstallConfigWrites({
-    configLayers: [
-      {
-        roles: ["provider"],
-        target: "user",
-      },
-      {
-        roles: ["activation"],
-        target: "user",
-      },
-    ],
-    loadTomlConfig: async (filePath) => {
-      loadedFilePaths.push(filePath);
-      return createLoadedTomlConfig(filePath, {
-        analytics: {
-          enabled: false,
-        },
-      });
-    },
+    finalScope: "user",
     paths: {
       ...testPaths,
       ...testLayerPaths,
     },
-    selectedModel: DEFAULT_MODEL,
-    tokenCommand: testTokenCommand,
-  });
-
-  assert.deepEqual(loadedFilePaths, [testLayerPaths.userConfigPath]);
-  assert.equal(userLayer.filePath, testLayerPaths.userConfigPath);
-  assert.equal(userLayer.config.model, DEFAULT_MODEL.modelId);
-});
-
-test("buildInstallConfigPlan keeps pure config merging separate from file loading", () => {
-  const [userLayer] = buildInstallConfigPlan({
-    configLayers: getScopeConfigLayers("user"),
-    currentConfigsByTarget: {
-      user: {
-        analytics: {
-          enabled: false,
-        },
-      },
-    },
-    paths: testPaths,
     selectedModel: DEFAULT_MODEL,
     tokenCommand: testTokenCommand,
   });

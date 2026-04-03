@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DEFAULT_MODEL } from "../src/constants/models.js";
+import { LOCAL_PROJECT_CONFIG_RELATIVE_PATH } from "../src/install/settings-paths.js";
 import {
   buildModelPromptConfig,
   buildScopePromptConfig,
@@ -37,8 +38,9 @@ test("buildScopePromptConfig keeps scope prompt structure centralized", () => {
 });
 
 test("buildTrackedLocalConfigActionPromptConfig keeps tracked-file actions centralized", () => {
-  const config =
-    buildTrackedLocalConfigActionPromptConfig(".codex/config.toml");
+  const config = buildTrackedLocalConfigActionPromptConfig(
+    LOCAL_PROJECT_CONFIG_RELATIVE_PATH,
+  );
 
   assert.equal(config.default, "user");
   assert.equal(config.loop, false);
@@ -78,7 +80,7 @@ test("promptForScope accepts injected runners without requiring local TTY checks
 
 test("promptForTrackedLocalConfigAction accepts injected runners without requiring local TTY checks", async () => {
   const action = await promptForTrackedLocalConfigAction(
-    ".codex/config.toml",
+    LOCAL_PROJECT_CONFIG_RELATIVE_PATH,
     async () => "cancel",
   );
 

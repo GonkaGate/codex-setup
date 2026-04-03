@@ -10,3 +10,7 @@ export function hasErrorCode(error: unknown, code: string | number): boolean {
 export function isMissingFileError(error: unknown): boolean {
   return hasErrorCode(error, "ENOENT");
 }
+
+export function describeUnknownError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

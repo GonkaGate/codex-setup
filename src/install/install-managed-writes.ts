@@ -4,7 +4,6 @@ import {
 } from "../constants/models.js";
 import {
   planInstallConfigWrites,
-  type ConfigTarget,
   type PlannedConfigWrite,
 } from "./codex-config.js";
 import { OWNER_READ_WRITE_MODE } from "./file-permissions.js";
@@ -47,11 +46,6 @@ export interface PlanInstallManagedWritesInput {
   selectedModel: SupportedModel;
   tokenCommand: TokenCommandConfig;
 }
-
-const CONFIG_FILE_KIND_BY_TARGET = {
-  project: "project_config",
-  user: "user_config",
-} as const satisfies Record<ConfigTarget, ManagedWriteKind>;
 
 export async function planInstallManagedWrites(
   input: PlanInstallManagedWritesInput,
@@ -139,7 +133,7 @@ function toManagedConfigWrite(
   const managedTomlWrite = createManagedTomlConfigWrite(configWrite.config);
 
   return createWritePlan(
-    CONFIG_FILE_KIND_BY_TARGET[configWrite.target],
+    configWrite.writeKind,
     configWrite.filePath,
     managedTomlWrite.content,
     {

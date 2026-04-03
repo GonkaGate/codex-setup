@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { ensureLocalProjectConfigExcluded } from "../src/install/local-git-ignore.js";
 import { inspectLocalProjectConfig } from "../src/install/local-project-config.js";
+import { resolveLocalProjectConfigPath } from "../src/install/settings-paths.js";
 import {
   createGitWorkspace,
   createTempWorkspace,
@@ -14,7 +15,7 @@ test("inspectLocalProjectConfig reports when the project is outside git", async 
   const workspace = await createTempWorkspace("codex-setup-outside-git");
 
   const configInspection = await inspectLocalProjectConfig(
-    path.join(workspace, ".codex", "config.toml"),
+    resolveLocalProjectConfigPath(workspace),
   );
 
   assert.deepEqual(configInspection, {
@@ -25,7 +26,7 @@ test("inspectLocalProjectConfig reports when the project is outside git", async 
 test("inspectLocalProjectConfig classifies tracked and untracked repo configs", async () => {
   const workspace = await createGitWorkspace("codex-setup-git-targets");
 
-  const configPath = path.join(workspace, ".codex", "config.toml");
+  const configPath = resolveLocalProjectConfigPath(workspace);
   let configInspection = await inspectLocalProjectConfig(configPath);
   assert.equal(configInspection.kind, "untracked");
 
@@ -47,7 +48,7 @@ test("ensureLocalProjectConfigExcluded surfaces exclude read errors", async () =
   });
 
   const configInspection = await inspectLocalProjectConfig(
-    path.join(workspace, ".codex", "config.toml"),
+    resolveLocalProjectConfigPath(workspace),
   );
   assert.equal(configInspection.kind, "untracked");
 
@@ -62,7 +63,7 @@ test("ensureLocalProjectConfigExcluded is a no-op for tracked and outside-repo c
     "codex-setup-outside-git-noop",
   );
   const outsideInspection = await inspectLocalProjectConfig(
-    path.join(outsideWorkspace, ".codex", "config.toml"),
+    resolveLocalProjectConfigPath(outsideWorkspace),
   );
   assert.equal(outsideInspection.kind, "outside_repo");
   await assert.doesNotReject(() => ensureLocalProjectConfigExcluded(undefined));
@@ -73,7 +74,7 @@ test("ensureLocalProjectConfigExcluded is a no-op for tracked and outside-repo c
   await trackLocalProjectConfig(trackedWorkspace);
 
   const trackedInspection = await inspectLocalProjectConfig(
-    path.join(trackedWorkspace, ".codex", "config.toml"),
+    resolveLocalProjectConfigPath(trackedWorkspace),
   );
   assert.equal(trackedInspection.kind, "tracked");
 
@@ -93,15 +94,17 @@ test("inspectLocalProjectConfig rejects a symlinked .codex directory", async (t)
 
   const workspace = await createGitWorkspace("codex-setup-symlink-dir");
 
+  const configDirectory = path.dirname(
+    resolveLocalProjectConfigPath(workspace),
+  );
   const realCodexDirectory = path.join(workspace, "real-codex");
   await mkdir(realCodexDirectory, {
     recursive: true,
   });
-  await symlink(realCodexDirectory, path.join(workspace, ".codex"), "dir");
+  await symlink(realCodexDirectory, configDirectory, "dir");
 
   await assert.rejects(
-    () =>
-      inspectLocalProjectConfig(path.join(workspace, ".codex", "config.toml")),
+    () => inspectLocalProjectConfig(resolveLocalProjectConfigPath(workspace)),
     /symlinked ".codex" directory/,
   );
 });
@@ -114,21 +117,17 @@ test("inspectLocalProjectConfig rejects a symlinked config file", async (t) => {
 
   const workspace = await createGitWorkspace("codex-setup-symlink-file");
 
-  const configDirectory = path.join(workspace, ".codex");
+  const configPath = resolveLocalProjectConfigPath(workspace);
+  const configDirectory = path.dirname(configPath);
   const realConfigPath = path.join(workspace, "real-config.toml");
   await mkdir(configDirectory, {
     recursive: true,
   });
   await writeFile(realConfigPath, 'model_provider = "openai"\n', "utf8");
-  await symlink(
-    realConfigPath,
-    path.join(configDirectory, "config.toml"),
-    "file",
-  );
+  await symlink(realConfigPath, configPath, "file");
 
   await assert.rejects(
-    () =>
-      inspectLocalProjectConfig(path.join(workspace, ".codex", "config.toml")),
+    () => inspectLocalProjectConfig(resolveLocalProjectConfigPath(workspace)),
     /symlinked file/,
   );
 });

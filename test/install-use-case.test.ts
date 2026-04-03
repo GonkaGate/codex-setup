@@ -5,6 +5,7 @@ import test from "node:test";
 import { DEFAULT_MODEL } from "../src/constants/models.js";
 import { buildBackupGlob } from "../src/install/backup.js";
 import { InstallCommitError } from "../src/install/install-errors.js";
+import { LOCAL_PROJECT_CONFIG_RELATIVE_PATH } from "../src/install/settings-paths.js";
 import { createInstallScenario } from "./helpers/install-scenario.js";
 import {
   expectGonkagateActivationConfig,
@@ -129,7 +130,9 @@ test("local scope keeps activation in the project file and trusts the repo root"
   const excludeText = await readFile(excludePath, "utf8");
   assert.match(excludeText, /\/\.codex\/config\.toml/);
   assert.equal(
-    excludeText.includes(buildBackupGlob("/.codex/config.toml")),
+    excludeText.includes(
+      buildBackupGlob(`/${LOCAL_PROJECT_CONFIG_RELATIVE_PATH}`),
+    ),
     true,
   );
 });

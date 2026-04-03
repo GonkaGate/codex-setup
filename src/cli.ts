@@ -8,6 +8,7 @@ import {
   SUPPORTED_MODELS,
   SUPPORTED_MODEL_KEYS,
 } from "./constants/models.js";
+import { describeUnknownError } from "./install/error-codes.js";
 import { runInstallUseCase } from "./install/install-use-case.js";
 import type { InstallScope } from "./install/settings-paths.js";
 
@@ -126,8 +127,7 @@ function handleCliError(error: unknown): void {
     return;
   }
 
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`\nError: ${message}`);
+  console.error(`\nError: ${describeUnknownError(error)}`);
   process.exitCode = 1;
 }
 

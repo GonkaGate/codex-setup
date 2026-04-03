@@ -3,6 +3,9 @@ import { homedir } from "node:os";
 import { findGitContext } from "./git-context.js";
 
 export type InstallScope = "user" | "local";
+export const LOCAL_PROJECT_CONFIG_RELATIVE_PATH = ".codex/config.toml";
+const LOCAL_PROJECT_CONFIG_PATH_SEGMENTS =
+  LOCAL_PROJECT_CONFIG_RELATIVE_PATH.split("/");
 
 export interface ResolveInstallPathsInput {
   environment?: NodeJS.ProcessEnv;
@@ -25,6 +28,13 @@ export function resolveCodexHome(
   return codexHome ? path.resolve(codexHome) : path.join(homedir(), ".codex");
 }
 
+export function resolveLocalProjectConfigPath(projectRoot: string): string {
+  return path.join(
+    path.resolve(projectRoot),
+    ...LOCAL_PROJECT_CONFIG_PATH_SEGMENTS,
+  );
+}
+
 export function resolveInstallPaths(
   input: ResolveInstallPathsInput,
 ): InstallPaths {
@@ -34,7 +44,7 @@ export function resolveInstallPaths(
   return {
     codexHome,
     modelCatalogPath: path.join(codexHome, "model-catalogs", "gonkagate.json"),
-    projectConfigPath: path.join(projectRoot, ".codex", "config.toml"),
+    projectConfigPath: resolveLocalProjectConfigPath(projectRoot),
     projectRoot,
     tokenPath: path.join(codexHome, "gonkagate", "token"),
     userConfigPath: path.join(codexHome, "config.toml"),

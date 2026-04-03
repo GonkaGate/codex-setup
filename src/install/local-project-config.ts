@@ -6,6 +6,7 @@ import {
   requireRepoRelativePath,
   type GitContext,
 } from "./git-context.js";
+import { LOCAL_PROJECT_CONFIG_RELATIVE_PATH } from "./settings-paths.js";
 import {
   assertPathTargetIsNotSymlink,
   inspectOptionalPathTarget,
@@ -138,7 +139,7 @@ async function isRepoPathTracked(
   } catch (error) {
     if (hasErrorCode(error, "ENOENT")) {
       throw new Error(
-        "Git is required to verify that .codex/config.toml is not already tracked before local install can continue.",
+        `Git is required to verify that ${LOCAL_PROJECT_CONFIG_RELATIVE_PATH} is not already tracked before local install can continue.`,
       );
     }
 

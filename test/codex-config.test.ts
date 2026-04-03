@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GONKAGATE_PROVIDER_ID } from "../src/constants/gateway.js";
 import { DEFAULT_MODEL } from "../src/constants/models.js";
 import {
   buildInstallConfigPlan,
@@ -54,6 +53,7 @@ test("planInstallConfigWrites keeps user scope config ownership centralized", as
 
   assert.equal(userLayer.target, "user");
   assert.equal(userLayer.filePath, testPaths.userConfigPath);
+  assert.equal(userLayer.writeKind, "user_config");
   expectGonkagateActivationConfig(userLayer.config, {
     configLabel: "userLayer.config",
     modelCatalogPath: testPaths.modelCatalogPath,
@@ -110,6 +110,7 @@ test("planInstallConfigWrites splits local scope across user and project layers"
   const projectLayer = configPlan[1];
 
   assert.equal(userLayer.filePath, testPaths.userConfigPath);
+  assert.equal(userLayer.writeKind, "user_config");
   assert.equal(userLayer.config.model_provider, undefined);
   assert.equal(userLayer.config.model, undefined);
   expectGonkagateProviderConfig(userLayer.config, {
@@ -126,6 +127,7 @@ test("planInstallConfigWrites splits local scope across user and project layers"
   );
 
   assert.equal(projectLayer.filePath, testPaths.projectConfigPath);
+  assert.equal(projectLayer.writeKind, "project_config");
   expectGonkagateActivationConfig(projectLayer.config, {
     configLabel: "projectLayer.config",
     modelCatalogPath: testPaths.modelCatalogPath,
@@ -188,6 +190,7 @@ test("buildInstallConfigPlan keeps pure config merging separate from file loadin
   });
 
   assert.equal(userLayer.target, "user");
+  assert.equal(userLayer.writeKind, "user_config");
   expectGonkagateActivationConfig(userLayer.config, {
     configLabel: "userLayer.config",
     modelCatalogPath: testPaths.modelCatalogPath,

@@ -15,6 +15,7 @@ import {
 import type { TokenCommandConfig } from "./token-helper.js";
 
 export type ConfigTarget = "user" | "project";
+export type ConfigWriteKind = "project_config" | "user_config";
 
 export type InstallConfigPaths = Pick<
   InstallPaths,
@@ -37,6 +38,7 @@ export interface PlannedConfigWrite {
   config: TomlTable;
   filePath: string;
   target: ConfigTarget;
+  writeKind: ConfigWriteKind;
 }
 
 export interface BuildInstallConfigPlanInput extends CommonInstallConfigPlanInput {
@@ -53,6 +55,7 @@ interface InstallConfigLayer {
   filePath: string;
   patch: TomlTable;
   target: ConfigTarget;
+  writeKind: ConfigWriteKind;
 }
 
 export async function planInstallConfigWrites(
@@ -64,20 +67,26 @@ export async function planInstallConfigWrites(
     input.loadTomlConfig,
   );
 
-  return buildInstallConfigPlan({
-    ...input,
-    existingConfigs,
-  });
+  return buildInstallConfigPlanFromLayers(configLayers, existingConfigs);
 }
 
 export function buildInstallConfigPlan(
   input: BuildInstallConfigPlanInput,
 ): PlannedConfigWrite[] {
-  return listInstallConfigLayers(input).map((layer) =>
+  return buildInstallConfigPlanFromLayers(
+    listInstallConfigLayers(input),
+    input.existingConfigs,
+  );
+}
+
+function buildInstallConfigPlanFromLayers(
+  configLayers: readonly InstallConfigLayer[],
+  existingConfigs: ExistingInstallConfigs,
+): PlannedConfigWrite[] {
+  return configLayers.map((layer) =>
     createConfigWrite(
-      layer.target,
-      layer.filePath,
-      mergeTomlTables(input.existingConfigs[layer.target] ?? {}, layer.patch),
+      layer,
+      mergeTomlTables(existingConfigs[layer.target] ?? {}, layer.patch),
     ),
   );
 }
@@ -111,6 +120,7 @@ function listInstallConfigLayers(
           input.paths.codexHome,
           input.tokenCommand,
         ),
+        "user_config",
       ),
     ];
   }
@@ -124,6 +134,7 @@ function listInstallConfigLayers(
         input.paths.codexHome,
         input.tokenCommand,
       ),
+      "user_config",
     ),
     createConfigLayer(
       "project",
@@ -132,6 +143,7 @@ function listInstallConfigLayers(
         input.selectedModel,
         input.paths.modelCatalogPath,
       ),
+      "project_config",
     ),
   ];
 }
@@ -140,23 +152,25 @@ function createConfigLayer(
   target: ConfigTarget,
   filePath: string,
   patch: TomlTable,
+  writeKind: ConfigWriteKind,
 ): InstallConfigLayer {
   return {
     filePath,
     patch,
     target,
+    writeKind,
   };
 }
 
 function createConfigWrite(
-  target: ConfigTarget,
-  filePath: string,
+  layer: InstallConfigLayer,
   config: TomlTable,
 ): PlannedConfigWrite {
   return {
     config,
-    filePath,
-    target,
+    filePath: layer.filePath,
+    target: layer.target,
+    writeKind: layer.writeKind,
   };
 }
 

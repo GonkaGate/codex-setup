@@ -6,6 +6,11 @@ import {
   buildInstallArtifacts,
   type InstallArtifacts,
 } from "../../src/install/install-artifacts.js";
+import {
+  createLocalScopeDetails,
+  createUserScopeDetails,
+} from "../../src/install/install-scope.js";
+import type { InstallOutcome } from "../../src/install/install-use-case.js";
 import type {
   LoadedTomlConfig,
   TomlTable,
@@ -35,8 +40,10 @@ export const TEST_LOCAL_SCOPE_PATHS = {
 } as const;
 
 export const TEST_TOKEN_COMMAND = TEST_INSTALL_ARTIFACTS.tokenCommand;
+type UserInstallOutcome = Extract<InstallOutcome, { finalScope: "user" }>;
+type LocalInstallOutcome = Extract<InstallOutcome, { finalScope: "local" }>;
 
-export interface CommonInstallOutcomeFields {
+interface CommonInstallOutcomeFields {
   codex: {
     command: string;
     version: string;
@@ -49,7 +56,7 @@ export interface CommonInstallOutcomeFields {
   userConfigPath: string;
 }
 
-export function createCommonInstallOutcomeFields(): CommonInstallOutcomeFields {
+function createCommonInstallOutcomeFields(): CommonInstallOutcomeFields {
   return {
     codex: {
       command: "codex",
@@ -61,6 +68,40 @@ export function createCommonInstallOutcomeFields(): CommonInstallOutcomeFields {
     selectedModel: DEFAULT_MODEL,
     tokenPath: TEST_INSTALL_PATHS.tokenPath,
     userConfigPath: TEST_INSTALL_PATHS.userConfigPath,
+  };
+}
+
+export function createTestInstallOutcome(
+  finalScope: "user",
+  overrides?: Partial<UserInstallOutcome>,
+): UserInstallOutcome;
+export function createTestInstallOutcome(
+  finalScope: "local",
+  overrides?: Partial<LocalInstallOutcome>,
+): LocalInstallOutcome;
+export function createTestInstallOutcome(
+  finalScope: "user" | "local",
+  overrides: Partial<InstallOutcome> = {},
+): InstallOutcome {
+  if (finalScope === "user") {
+    const userOverrides = overrides as Partial<UserInstallOutcome>;
+
+    return {
+      ...createUserScopeDetails(userOverrides.switchedToUserScope ?? false),
+      ...createCommonInstallOutcomeFields(),
+      requestedScope: "user",
+      writes: [],
+      ...userOverrides,
+    };
+  }
+
+  const localOverrides = overrides as Partial<LocalInstallOutcome>;
+  return {
+    ...createLocalScopeDetails(TEST_LOCAL_SCOPE_PATHS),
+    ...createCommonInstallOutcomeFields(),
+    requestedScope: "local",
+    writes: [],
+    ...localOverrides,
   };
 }
 

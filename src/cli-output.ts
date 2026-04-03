@@ -1,5 +1,6 @@
 import { GONKAGATE_BASE_URL } from "./constants/gateway.js";
 import { SUPPORTED_MODELS } from "./constants/models.js";
+import { LOCAL_PROJECT_CONFIG_RELATIVE_PATH } from "./install/settings-paths.js";
 import type { InstallOutcome } from "./install/install-use-case.js";
 import type { ManagedWriteResult } from "./install/write-managed-file.js";
 
@@ -38,7 +39,7 @@ function buildSuccessSummarySection(outcome: InstallOutcome): string {
 
 function formatActivationScope(outcome: InstallOutcome): string {
   return outcome.switchedToUserScope
-    ? `${outcome.finalScope} (switched from local because .codex/config.toml is tracked)`
+    ? `${outcome.finalScope} (switched from local because ${LOCAL_PROJECT_CONFIG_RELATIVE_PATH} is tracked)`
     : outcome.finalScope;
 }
 

@@ -10,6 +10,7 @@ import type {
   TrackedLocalProjectConfigInspection,
   UntrackedLocalProjectConfigInspection,
 } from "../src/install/local-project-config.js";
+import { LOCAL_PROJECT_CONFIG_RELATIVE_PATH } from "../src/install/settings-paths.js";
 import { TEST_LOCAL_SCOPE_PATHS } from "./helpers/install-fixtures.js";
 
 test("resolveInstallScope keeps user scope without local config inspection", async () => {
@@ -128,7 +129,7 @@ function createTrackedInspection(): TrackedLocalProjectConfigInspection {
       repoRoot: TEST_LOCAL_SCOPE_PATHS.projectRoot,
     },
     kind: "tracked",
-    repoRelativeConfigPath: ".codex/config.toml",
+    repoRelativeConfigPath: LOCAL_PROJECT_CONFIG_RELATIVE_PATH,
   };
 }
 
@@ -136,13 +137,13 @@ function createUntrackedInspection(): UntrackedLocalProjectConfigInspection {
   return {
     excludeTarget: {
       gitDir: "/Users/test/project/.git",
-      repoRelativeConfigPath: ".codex/config.toml",
+      repoRelativeConfigPath: LOCAL_PROJECT_CONFIG_RELATIVE_PATH,
     },
     gitContext: {
       gitDir: "/Users/test/project/.git",
       repoRoot: TEST_LOCAL_SCOPE_PATHS.projectRoot,
     },
     kind: "untracked",
-    repoRelativeConfigPath: ".codex/config.toml",
+    repoRelativeConfigPath: LOCAL_PROJECT_CONFIG_RELATIVE_PATH,
   };
 }

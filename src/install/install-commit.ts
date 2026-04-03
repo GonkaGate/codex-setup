@@ -2,6 +2,7 @@ import {
   InstallCommitError,
   type InstallRollbackFailure,
 } from "./install-errors.js";
+import { describeUnknownError } from "./error-codes.js";
 import type {
   InstallWritePhase,
   ManagedWritePlan,
@@ -79,7 +80,7 @@ async function rollbackCompletedWrites(
     } catch (error) {
       rollbackFailures.push({
         filePath: completedWrite.filePath,
-        message: error instanceof Error ? error.message : String(error),
+        message: describeUnknownError(error),
       });
     }
   }

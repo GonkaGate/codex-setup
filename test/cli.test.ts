@@ -7,16 +7,9 @@ import { formatIntroOutput, formatSuccessOutput } from "../src/cli-output.js";
 import { GONKAGATE_BASE_URL } from "../src/constants/gateway.js";
 import { DEFAULT_MODEL_KEY } from "../src/constants/models.js";
 import { parseCliOptions } from "../src/cli.js";
-import {
-  createLocalScopeDetails,
-  createUserScopeDetails,
-} from "../src/install/install-scope.js";
-import type { InstallOutcome } from "../src/install/install-use-case.js";
+import { LOCAL_PROJECT_CONFIG_RELATIVE_PATH } from "../src/install/settings-paths.js";
 import { escapeRegExp, repoRoot } from "./contract-helpers.js";
-import {
-  TEST_LOCAL_SCOPE_PATHS,
-  createCommonInstallOutcomeFields as createTestInstallOutcomeFields,
-} from "./helpers/install-fixtures.js";
+import { createTestInstallOutcome } from "./helpers/install-fixtures.js";
 
 test("parseCliOptions reads curated model and scope flags", () => {
   const options = parseCliOptions([
@@ -75,7 +68,7 @@ test("formatIntroOutput keeps installer framing separate from command parsing", 
 
 test("formatSuccessOutput groups optional sections without mixing concerns", () => {
   const output = formatSuccessOutput(
-    createLocalInstallOutcome({
+    createTestInstallOutcome("local", {
       writes: [
         {
           backupPath: "/Users/test/.codex/config.toml.bak",
@@ -111,7 +104,7 @@ test("formatSuccessOutput groups optional sections without mixing concerns", () 
 
 test("formatSuccessOutput explains when a local request switches to user scope", () => {
   const output = formatSuccessOutput(
-    createUserInstallOutcome({
+    createTestInstallOutcome("user", {
       requestedScope: "local",
       switchedToUserScope: true,
     }),
@@ -120,14 +113,18 @@ test("formatSuccessOutput explains when a local request switches to user scope",
   assert.match(output, /Activation scope: user/);
   assert.match(
     output,
-    /switched from local because \.codex\/config\.toml is tracked/,
+    new RegExp(
+      escapeRegExp(
+        `switched from local because ${LOCAL_PROJECT_CONFIG_RELATIVE_PATH} is tracked`,
+      ),
+    ),
   );
   assert.equal(output.includes("Local scope details:"), false);
 });
 
 test("formatSuccessOutput omits empty optional sections for user scope", () => {
   const output = formatSuccessOutput(
-    createUserInstallOutcome({
+    createTestInstallOutcome("user", {
       writes: [
         {
           changed: true,
@@ -142,30 +139,3 @@ test("formatSuccessOutput omits empty optional sections for user scope", () => {
   assert.equal(output.includes("Backups:"), false);
   assert.equal(output.includes("Local scope details:"), false);
 });
-
-type UserInstallOutcome = Extract<InstallOutcome, { finalScope: "user" }>;
-type LocalInstallOutcome = Extract<InstallOutcome, { finalScope: "local" }>;
-
-function createUserInstallOutcome(
-  overrides: Partial<UserInstallOutcome> = {},
-): UserInstallOutcome {
-  return {
-    ...createUserScopeDetails(overrides.switchedToUserScope ?? false),
-    ...createTestInstallOutcomeFields(),
-    requestedScope: "user",
-    writes: [],
-    ...overrides,
-  };
-}
-
-function createLocalInstallOutcome(
-  overrides: Partial<LocalInstallOutcome> = {},
-): LocalInstallOutcome {
-  return {
-    ...createLocalScopeDetails(TEST_LOCAL_SCOPE_PATHS),
-    ...createTestInstallOutcomeFields(),
-    requestedScope: "local",
-    writes: [],
-    ...overrides,
-  };
-}

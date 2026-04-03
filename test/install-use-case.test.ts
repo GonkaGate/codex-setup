@@ -6,7 +6,10 @@ import { DEFAULT_MODEL } from "../src/constants/models.js";
 import { buildBackupGlob } from "../src/install/backup.js";
 import { InstallCommitError } from "../src/install/install-errors.js";
 import { LOCAL_PROJECT_CONFIG_RELATIVE_PATH } from "../src/install/settings-paths.js";
-import { createInstallScenario } from "./helpers/install-scenario.js";
+import {
+  createInstallScenario,
+  type InstallScenario,
+} from "./helpers/install-scenario.js";
 import {
   expectGonkagateActivationConfig,
   expectGonkagateProviderConfig,
@@ -25,6 +28,27 @@ import {
   parseJsonObject,
   parseTomlTable,
 } from "./helpers/structured-data.js";
+
+async function seedExistingUserManagedFiles(
+  scenario: Pick<InstallScenario, "installPaths">,
+  input: {
+    tokenText: string;
+    userConfigText: string;
+  },
+): Promise<void> {
+  await mkdir(path.dirname(scenario.installPaths.userConfigPath), {
+    recursive: true,
+  });
+  await writeFile(
+    scenario.installPaths.userConfigPath,
+    input.userConfigText,
+    "utf8",
+  );
+  await mkdir(path.dirname(scenario.installPaths.tokenPath), {
+    recursive: true,
+  });
+  await writeFile(scenario.installPaths.tokenPath, input.tokenText, "utf8");
+}
 
 test("user scope writes GonkaGate provider, token helper, and curated catalog", async () => {
   const scenario = await createInstallScenario("user", {
@@ -182,20 +206,16 @@ test("existing user config and token files are preserved via backups before over
     apiKey: "gp-new-key-999999",
     scope: "user",
   });
-  await mkdir(scenario.codexHome, {
-    recursive: true,
+  await seedExistingUserManagedFiles(scenario, {
+    tokenText: "gp-old-key\n",
+    userConfigText: [
+      'model = "gpt-5.3-codex"',
+      "",
+      "[analytics]",
+      "enabled = false",
+      "",
+    ].join("\n"),
   });
-  await writeFile(
-    scenario.installPaths.userConfigPath,
-    ['model = "gpt-5.3-codex"', "", "[analytics]", "enabled = false", ""].join(
-      "\n",
-    ),
-    "utf8",
-  );
-  await mkdir(path.dirname(scenario.installPaths.tokenPath), {
-    recursive: true,
-  });
-  await writeFile(scenario.installPaths.tokenPath, "gp-old-key\n", "utf8");
 
   const outcome = await scenario.run();
 
@@ -288,15 +308,10 @@ test("commit failures roll back completed managed writes and preserve prior file
   const baseDependencies = scenario.createDependencies();
   const tokenPath = scenario.installPaths.tokenPath;
   const helperPath = scenario.tokenCommand.helperFilePath;
-  await writeFile(
-    scenario.installPaths.userConfigPath,
-    'model = "openai"\n',
-    "utf8",
-  );
-  await mkdir(path.dirname(tokenPath), {
-    recursive: true,
+  await seedExistingUserManagedFiles(scenario, {
+    tokenText: "gp-old-key\n",
+    userConfigText: 'model = "openai"\n',
   });
-  await writeFile(tokenPath, "gp-old-key\n", "utf8");
 
   const failingUserConfigPath = scenario.installPaths.userConfigPath;
   const dependencies = scenario.createDependencies({

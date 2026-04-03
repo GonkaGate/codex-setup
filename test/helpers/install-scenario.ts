@@ -55,20 +55,18 @@ export interface InstallScenario {
   workspace: string;
 }
 
-function createInstallDependencyOverrides(options: InstallDependencyOptions) {
+function createScenarioInputOverrides(options: InstallDependencyOptions) {
   return {
-    input: {
-      checkCodexAvailable: () =>
-        createTestCodexAvailability(
-          options.codexVersion ?? DEFAULT_TEST_CODEX_VERSION,
-        ),
-      environment: createTestCodexEnvironment(options.codexHome, process.env),
-      promptForApiKey: async () => options.apiKey ?? DEFAULT_TEST_API_KEY,
-      promptForModel: async () => DEFAULT_MODEL,
-      promptForScope: async () => options.promptScope,
-      promptForTrackedLocalConfigAction: async () =>
-        options.trackedLocalAction ?? "cancel",
-    },
+    checkCodexAvailable: () =>
+      createTestCodexAvailability(
+        options.codexVersion ?? DEFAULT_TEST_CODEX_VERSION,
+      ),
+    environment: createTestCodexEnvironment(options.codexHome, process.env),
+    promptForApiKey: async () => options.apiKey ?? DEFAULT_TEST_API_KEY,
+    promptForModel: async () => DEFAULT_MODEL,
+    promptForScope: async () => options.promptScope,
+    promptForTrackedLocalConfigAction: async () =>
+      options.trackedLocalAction ?? "cancel",
   };
 }
 
@@ -86,6 +84,13 @@ export async function createInstallScenario(
     projectRoot: workspace,
   });
   const { installPaths, tokenCommand } = installArtifacts;
+  const scenarioInputOverrides = createScenarioInputOverrides({
+    apiKey: options.apiKey,
+    codexHome,
+    codexVersion: options.codexVersion,
+    promptScope: options.scope,
+    trackedLocalAction: options.trackedLocalAction,
+  });
 
   const createDependencies = (
     overrides: InstallUseCaseDependencyOverrides = {},
@@ -93,13 +98,7 @@ export async function createInstallScenario(
     createInstallUseCaseDependencies({
       commit: overrides.commit,
       input: {
-        ...createInstallDependencyOverrides({
-          apiKey: options.apiKey,
-          codexHome,
-          codexVersion: options.codexVersion,
-          promptScope: options.scope,
-          trackedLocalAction: options.trackedLocalAction,
-        }).input,
+        ...scenarioInputOverrides,
         ...overrides.input,
       },
       planning: overrides.planning,

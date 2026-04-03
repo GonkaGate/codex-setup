@@ -10,6 +10,8 @@ import {
   type InstallWritePhase,
 } from "./install-managed-writes.js";
 import {
+  createLocalScopeDetails,
+  createUserScopeDetails,
   resolveInstallScope,
   type LocalScopeDetails,
   type LocalScopeResolution,
@@ -209,16 +211,15 @@ export function createInstallSummary(
   if (context.finalScope === "user") {
     return {
       ...commonSummary,
-      finalScope: "user",
-      switchedToUserScope: context.switchedToUserScope,
+      ...createUserScopeDetails(context.switchedToUserScope),
     };
   }
 
   return {
     ...commonSummary,
-    finalScope: "local",
-    projectConfigPath: context.projectConfigPath,
-    switchedToUserScope: false,
-    trustTargetPath: context.trustTargetPath,
+    ...createLocalScopeDetails({
+      projectConfigPath: context.projectConfigPath,
+      projectRoot: context.trustTargetPath,
+    }),
   };
 }

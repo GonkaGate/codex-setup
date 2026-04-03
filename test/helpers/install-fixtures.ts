@@ -41,11 +41,18 @@ interface TestInstallArtifactsOptions {
 }
 
 interface CommonPreparedInstallContextFields {
+  apiKey: string;
   codex: PreparedInstallContext["codex"];
   installPaths: InstallPaths;
   requestedScope: InstallScope;
   selectedModel: SupportedModel;
   tokenCommand: TokenCommandConfig;
+}
+
+interface CommonInstallSummaryOverrides {
+  codex?: InstallOutcome["codex"];
+  requestedScope?: InstallScope;
+  selectedModel?: SupportedModel;
 }
 
 type UserPreparedInstallContext = Extract<
@@ -105,57 +112,83 @@ export const TEST_LOCAL_SCOPE_PATHS = {
 export const TEST_TOKEN_COMMAND = TEST_INSTALL_ARTIFACTS.tokenCommand;
 
 function createCommonPreparedInstallContextFields(
-  requestedScope: InstallScope,
-  overrides: Partial<CommonPreparedInstallContextFields> = {},
+  defaultRequestedScope: InstallScope,
+  overrides: CommonInstallSummaryOverrides = {},
 ): CommonPreparedInstallContextFields {
   return {
-    codex: createTestCodexAvailability(),
+    apiKey: DEFAULT_TEST_API_KEY,
+    codex: overrides.codex ?? createTestCodexAvailability(),
     installPaths: TEST_INSTALL_PATHS,
-    requestedScope,
-    selectedModel: DEFAULT_MODEL,
+    requestedScope: overrides.requestedScope ?? defaultRequestedScope,
+    selectedModel: overrides.selectedModel ?? DEFAULT_MODEL,
     tokenCommand: TEST_TOKEN_COMMAND,
-    ...overrides,
   };
 }
 
-function createUserPreparedInstallContext(
-  overrides: Omit<Partial<UserInstallOutcome>, "writes"> = {},
-): UserPreparedInstallContext {
-  return {
-    ...createCommonPreparedInstallContextFields(
-      overrides.requestedScope ?? "user",
-      {
-        ...(overrides.codex ? { codex: overrides.codex } : {}),
-        ...(overrides.requestedScope
-          ? { requestedScope: overrides.requestedScope }
-          : {}),
-        ...(overrides.selectedModel
-          ? { selectedModel: overrides.selectedModel }
-          : {}),
-      },
-    ),
-    ...createUserScopeDetails(overrides.switchedToUserScope ?? false),
-  };
-}
+type UserInstallSummaryOverrides = Omit<Partial<UserInstallOutcome>, "writes">;
+type LocalInstallSummaryOverrides = Omit<
+  Partial<LocalInstallOutcome>,
+  "writes"
+>;
 
-function createLocalPreparedInstallContext(
-  overrides: Omit<Partial<LocalInstallOutcome>, "writes"> = {},
-): LocalPreparedInstallContext {
+function createPreparedInstallContextForScope(
+  finalScope: "user",
+  overrides?: UserInstallSummaryOverrides,
+): UserPreparedInstallContext;
+function createPreparedInstallContextForScope(
+  finalScope: "local",
+  overrides?: LocalInstallSummaryOverrides,
+): LocalPreparedInstallContext;
+function createPreparedInstallContextForScope(
+  finalScope: "user" | "local",
+  overrides?: Omit<Partial<InstallOutcome>, "writes">,
+): PreparedInstallContext;
+function createPreparedInstallContextForScope(
+  finalScope: "user" | "local",
+  overrides: Omit<Partial<InstallOutcome>, "writes"> = {},
+): PreparedInstallContext {
+  const commonFields = createCommonPreparedInstallContextFields(
+    finalScope,
+    overrides,
+  );
+
+  if (finalScope === "user") {
+    const userOverrides = overrides as UserInstallSummaryOverrides;
+
+    return {
+      ...commonFields,
+      ...createUserScopeDetails(userOverrides.switchedToUserScope ?? false),
+    };
+  }
+
   return {
-    ...createCommonPreparedInstallContextFields(
-      overrides.requestedScope ?? "local",
-      {
-        ...(overrides.codex ? { codex: overrides.codex } : {}),
-        ...(overrides.requestedScope
-          ? { requestedScope: overrides.requestedScope }
-          : {}),
-        ...(overrides.selectedModel
-          ? { selectedModel: overrides.selectedModel }
-          : {}),
-      },
-    ),
+    ...commonFields,
     ...createLocalScopeDetails(TEST_LOCAL_SCOPE_PATHS),
   };
+}
+
+function createTestInstallSummary(
+  finalScope: "user",
+  overrides?: UserInstallSummaryOverrides,
+): Omit<UserInstallOutcome, "writes">;
+function createTestInstallSummary(
+  finalScope: "local",
+  overrides?: LocalInstallSummaryOverrides,
+): Omit<LocalInstallOutcome, "writes">;
+function createTestInstallSummary(
+  finalScope: "user" | "local",
+  overrides?: Omit<Partial<InstallOutcome>, "writes">,
+): Omit<InstallOutcome, "writes">;
+function createTestInstallSummary(
+  finalScope: "user" | "local",
+  overrides: Omit<Partial<InstallOutcome>, "writes"> = {},
+): Omit<InstallOutcome, "writes"> {
+  return createInstallSummary(
+    createPreparedInstallContextForScope(
+      finalScope as "user" | "local",
+      overrides,
+    ),
+  );
 }
 
 export function createTestInstallOutcome(
@@ -175,9 +208,7 @@ export function createTestInstallOutcome(
     const { writes = [], ...summaryOverrides } = userOverrides;
 
     return {
-      ...createInstallSummary(
-        createUserPreparedInstallContext(summaryOverrides),
-      ),
+      ...createTestInstallSummary("user", summaryOverrides),
       ...summaryOverrides,
       writes,
     };
@@ -187,9 +218,7 @@ export function createTestInstallOutcome(
   const { writes = [], ...summaryOverrides } = localOverrides;
 
   return {
-    ...createInstallSummary(
-      createLocalPreparedInstallContext(summaryOverrides),
-    ),
+    ...createTestInstallSummary("local", summaryOverrides),
     ...summaryOverrides,
     writes,
   };

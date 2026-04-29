@@ -4,17 +4,17 @@
 
 export const SUPPORTED_MODELS_CONTRACT: readonly [
   {
-    readonly key: "gpt-5.4";
-    readonly displayName: "GPT-5.4";
-    readonly modelId: "gpt-5.4";
-    readonly description: "Current validated GonkaGate model for Codex CLI.";
-    readonly isDefault: true;
-  },
-  {
     readonly key: "moonshotai/Kimi-K2.6";
     readonly displayName: "Kimi K2.6";
     readonly modelId: "moonshotai/Kimi-K2.6";
     readonly description: "Moonshot AI multimodal agentic coding model for long-horizon tasks.";
+    readonly isDefault: true;
+  },
+  {
+    readonly key: "gpt-5.4";
+    readonly displayName: "GPT-5.4";
+    readonly modelId: "gpt-5.4";
+    readonly description: "Current validated GonkaGate model for Codex CLI.";
     readonly isDefault: false;
   },
 ];

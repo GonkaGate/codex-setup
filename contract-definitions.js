@@ -4,18 +4,18 @@
 
 export const SUPPORTED_MODELS_CONTRACT = [
   {
-    key: "gpt-5.4",
-    displayName: "GPT-5.4",
-    modelId: "gpt-5.4",
-    description: "Current validated GonkaGate model for Codex CLI.",
-    isDefault: true,
-  },
-  {
     key: "moonshotai/Kimi-K2.6",
     displayName: "Kimi K2.6",
     modelId: "moonshotai/Kimi-K2.6",
     description:
       "Moonshot AI multimodal agentic coding model for long-horizon tasks.",
+    isDefault: true,
+  },
+  {
+    key: "gpt-5.4",
+    displayName: "GPT-5.4",
+    modelId: "gpt-5.4",
+    description: "Current validated GonkaGate model for Codex CLI.",
     isDefault: false,
   },
 ];

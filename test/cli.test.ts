@@ -73,7 +73,7 @@ test("formatIntroOutput keeps installer framing separate from command parsing", 
   assert.match(output, new RegExp(escapeRegExp(GONKAGATE_BASE_URL)));
   assert.match(
     output,
-    /Curated model choices: gpt-5\.4, moonshotai\/Kimi-K2\.6\./,
+    /Curated model choices: moonshotai\/Kimi-K2\.6, gpt-5\.4\./,
   );
 });
 

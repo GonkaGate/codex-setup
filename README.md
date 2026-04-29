@@ -16,8 +16,8 @@ What the installer does today:
   `0.118.0`
 - prompts for a hidden GonkaGate `gp-...` key
 - uses a curated model registry bundled with this package
-- currently ships curated Codex model choices: `gpt-5.4` (default) and
-  `moonshotai/Kimi-K2.6`
+- currently ships curated Codex model choices: `moonshotai/Kimi-K2.6`
+  (default) and `gpt-5.4`
 - asks whether GonkaGate should be activated in `user` or `local` scope
 - keeps the secret, helper command, and curated model catalog under
   `~/.codex/...` by default, or under `CODEX_HOME` when that env var is set
@@ -49,7 +49,7 @@ What the installer does today:
 
 ```toml
 model_provider = "gonkagate"
-model = "gpt-5.4"
+model = "moonshotai/Kimi-K2.6"
 model_catalog_json = "/Users/you/.codex/model-catalogs/gonkagate.json"
 
 [model_providers.gonkagate]
@@ -65,7 +65,7 @@ trust entry, while `<project-root>/.codex/config.toml` activates:
 
 ```toml
 model_provider = "gonkagate"
-model = "gpt-5.4"
+model = "moonshotai/Kimi-K2.6"
 model_catalog_json = "/Users/you/.codex/model-catalogs/gonkagate.json"
 ```
 

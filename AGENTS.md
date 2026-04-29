@@ -27,7 +27,7 @@ Current honest state:
 - the current bin surface is `gonkagate-codex`
 - the runtime lives under `src/` and is compiled to `dist/`
 - the current curated model registry contains two Codex model choices:
-  `gpt-5.4` (default) and `moonshotai/Kimi-K2.6`
+  `moonshotai/Kimi-K2.6` (default) and `gpt-5.4`
 - the current verified upstream baseline is stable `@openai/codex` `0.118.0`
   as of April 2, 2026
 

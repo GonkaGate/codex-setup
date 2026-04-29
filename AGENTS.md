@@ -26,8 +26,8 @@ Current honest state:
 - the installer is implemented for Codex CLI
 - the current bin surface is `gonkagate-codex`
 - the runtime lives under `src/` and is compiled to `dist/`
-- the current curated model registry contains one validated Codex model:
-  `gpt-5.4`
+- the current curated model registry contains two Codex model choices:
+  `gpt-5.4` (default) and `moonshotai/Kimi-K2.6`
 - the current verified upstream baseline is stable `@openai/codex` `0.118.0`
   as of April 2, 2026
 
@@ -105,8 +105,8 @@ These are implementation facts today, not future plans:
   - `~/.codex/bin/gonkagate-token`
   - `~/.codex/model-catalogs/gonkagate.json`
   - `<project-root>/.codex/config.toml` for local scope only
-- the current curated model catalog is derived from upstream Codex model
-  metadata and currently includes `gpt-5.4`
+- the current curated model catalog includes `gpt-5.4` and
+  `moonshotai/Kimi-K2.6`
 - `scripts/model-catalog-source.json` is the committed curated source snapshot
   for regenerating `src/constants/model-catalog.ts`
 - `scripts/check-model-catalog.mjs` and `test/models.test.ts` guard against

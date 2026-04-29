@@ -16,7 +16,8 @@ npx @gonkagate/codex-setup
    least `0.118.0`.
 2. Prompt for a GonkaGate `gp-...` key through a hidden input.
 3. Choose a model from the curated registry bundled with this package.
-   Today that registry contains one validated entry: `gpt-5.4`.
+   Today that registry contains `gpt-5.4` (default) and
+   `moonshotai/Kimi-K2.6`.
 4. Choose `user` or `local` scope.
 5. Save the secret only under `~/.codex/...` (or `CODEX_HOME` when that env
    var is set), never inside the repository.

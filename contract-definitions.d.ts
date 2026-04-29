@@ -10,6 +10,13 @@ export const SUPPORTED_MODELS_CONTRACT: readonly [
     readonly description: "Current validated GonkaGate model for Codex CLI.";
     readonly isDefault: true;
   },
+  {
+    readonly key: "moonshotai/Kimi-K2.6";
+    readonly displayName: "Kimi K2.6";
+    readonly modelId: "moonshotai/Kimi-K2.6";
+    readonly description: "Moonshot AI multimodal agentic coding model for long-horizon tasks.";
+    readonly isDefault: false;
+  },
 ];
 
 export type SupportedModelContractDefinition =

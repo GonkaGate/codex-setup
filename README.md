@@ -16,7 +16,8 @@ What the installer does today:
   `0.118.0`
 - prompts for a hidden GonkaGate `gp-...` key
 - uses a curated model registry bundled with this package
-- currently ships one validated Codex model choice: `gpt-5.4`
+- currently ships curated Codex model choices: `gpt-5.4` (default) and
+  `moonshotai/Kimi-K2.6`
 - asks whether GonkaGate should be activated in `user` or `local` scope
 - keeps the secret, helper command, and curated model catalog under
   `~/.codex/...` by default, or under `CODEX_HOME` when that env var is set

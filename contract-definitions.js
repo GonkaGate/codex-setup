@@ -10,6 +10,14 @@ export const SUPPORTED_MODELS_CONTRACT = [
     description: "Current validated GonkaGate model for Codex CLI.",
     isDefault: true,
   },
+  {
+    key: "moonshotai/Kimi-K2.6",
+    displayName: "Kimi K2.6",
+    modelId: "moonshotai/Kimi-K2.6",
+    description:
+      "Moonshot AI multimodal agentic coding model for long-horizon tasks.",
+    isDefault: false,
+  },
 ];
 
 export const VERIFIED_CODEX_CONTRACT = {

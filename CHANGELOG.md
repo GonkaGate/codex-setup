@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Added `moonshotai/Kimi-K2.6` to the curated GonkaGate Codex model registry
+  and generated `model_catalog_json`.
 - Implemented the interactive Codex installer behind
   `npx @gonkagate/codex-setup`.
 - Added command-backed GonkaGate provider setup for Codex CLI, including

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { DEFAULT_MODEL } from "../src/constants/models.js";
+import { DEFAULT_MODEL, SUPPORTED_MODELS } from "../src/constants/models.js";
 import { buildBackupGlob } from "../src/install/backup.js";
 import { InstallCommitError } from "../src/install/install-errors.js";
 import { LOCAL_PROJECT_CONFIG_RELATIVE_PATH } from "../src/install/settings-paths.js";
@@ -93,7 +93,7 @@ test("user scope writes GonkaGate provider, token helper, and curated catalog", 
         `modelCatalog.models[${index}].slug`,
       ),
     ),
-    [DEFAULT_MODEL.modelId],
+    SUPPORTED_MODELS.map((model) => model.modelId),
   );
 
   assert.deepEqual(

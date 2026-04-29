@@ -5,15 +5,22 @@ import type { InstallOutcome } from "./install/install-use-case.js";
 import type { ManagedWriteResult } from "./install/write-managed-file.js";
 
 export function formatIntroOutput(): string {
+  const modelKeys = SUPPORTED_MODELS.map((model) => model.key).join(", ");
+  const modelChoiceLabel = formatModelChoiceLabel(SUPPORTED_MODELS.length);
+
   return [
     "Connect Codex CLI to GonkaGate in one step.",
     "",
     "This installer writes the minimum safe Codex config and keeps the secret under ~/.codex only.",
     `Base URL is fixed to ${GONKAGATE_BASE_URL}.`,
-    `Curated model choice: ${SUPPORTED_MODELS.map((model) => model.key).join(", ")}.`,
+    `${modelChoiceLabel}: ${modelKeys}.`,
     "",
     "",
   ].join("\n");
+}
+
+function formatModelChoiceLabel(modelCount: number): string {
+  return modelCount === 1 ? "Curated model choice" : "Curated model choices";
 }
 
 export function formatSuccessOutput(outcome: InstallOutcome): string {

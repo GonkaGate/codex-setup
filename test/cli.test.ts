@@ -5,22 +5,30 @@ import test from "node:test";
 import { CONTRACT_METADATA } from "../contract-metadata.js";
 import { formatIntroOutput, formatSuccessOutput } from "../src/cli-output.js";
 import { GONKAGATE_BASE_URL } from "../src/constants/gateway.js";
-import { DEFAULT_MODEL_KEY } from "../src/constants/models.js";
+import {
+  DEFAULT_MODEL_KEY,
+  SUPPORTED_MODELS,
+} from "../src/constants/models.js";
 import { parseCliOptions } from "../src/cli.js";
 import { LOCAL_PROJECT_CONFIG_RELATIVE_PATH } from "../src/install/settings-paths.js";
 import { escapeRegExp, repoRoot } from "./contract-helpers.js";
 import { createTestInstallOutcome } from "./helpers/install-fixtures.js";
 
 test("parseCliOptions reads curated model and scope flags", () => {
+  const kimiModel = SUPPORTED_MODELS.find(
+    (model) => model.modelId === "moonshotai/Kimi-K2.6",
+  );
+  assert.ok(kimiModel);
+
   const options = parseCliOptions([
     "--scope",
     "local",
     "--model",
-    DEFAULT_MODEL_KEY,
+    kimiModel.key,
   ]);
 
   assert.equal(options.scope, "local");
-  assert.equal(options.modelKey, DEFAULT_MODEL_KEY);
+  assert.equal(options.modelKey, kimiModel.key);
 });
 
 test("parseCliOptions rejects API key flags", () => {
@@ -63,7 +71,10 @@ test("formatIntroOutput keeps installer framing separate from command parsing", 
 
   assert.match(output, /Connect Codex CLI to GonkaGate in one step\./);
   assert.match(output, new RegExp(escapeRegExp(GONKAGATE_BASE_URL)));
-  assert.match(output, /Curated model choice: gpt-5\.4\./);
+  assert.match(
+    output,
+    /Curated model choices: gpt-5\.4, moonshotai\/Kimi-K2\.6\./,
+  );
 });
 
 test("formatSuccessOutput groups optional sections without mixing concerns", () => {

@@ -31,14 +31,18 @@ export function buildModelPromptConfig(
   const defaultModel = requireModel(models, defaultModelKey);
 
   return buildNumberedSelectPromptConfig({
-    choices: models.map((model) => ({
-      description: model.description
-        ? `${model.description} Model ID: ${model.modelId}`
-        : `Model ID: ${model.modelId}`,
-      name: model.displayName,
-      short: model.key,
-      value: model.key,
-    })),
+    choices: models.map((model) => {
+      const modelIdDescription = `Model ID: ${model.modelId}`;
+
+      return {
+        description: model.description
+          ? `${model.description} ${modelIdDescription}`
+          : modelIdDescription,
+        name: model.displayName,
+        short: model.key,
+        value: model.key,
+      };
+    }),
     default: defaultModel.key,
     message: "Choose a GonkaGate model for Codex CLI",
     pageSize: Math.min(models.length, 8),

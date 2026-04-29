@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_MODEL } from "../src/constants/models.js";
+import { DEFAULT_MODEL, SUPPORTED_MODELS } from "../src/constants/models.js";
 import { LOCAL_PROJECT_CONFIG_RELATIVE_PATH } from "../src/install/settings-paths.js";
 import {
   buildModelPromptConfig,
@@ -12,15 +12,19 @@ import {
 } from "../src/install/prompts.js";
 
 test("buildModelPromptConfig keeps numbered-select defaults centralized", () => {
-  const config = buildModelPromptConfig([DEFAULT_MODEL], DEFAULT_MODEL.key);
+  const config = buildModelPromptConfig(SUPPORTED_MODELS, DEFAULT_MODEL.key);
 
   assert.equal(config.default, DEFAULT_MODEL.key);
   assert.equal(config.loop, false);
   assert.equal(config.message, "Choose a GonkaGate model for Codex CLI");
-  assert.equal(config.pageSize, 1);
+  assert.equal(config.pageSize, SUPPORTED_MODELS.length);
   assert.equal(config.theme?.indexMode, "number");
-  assert.equal(config.choices.length, 1);
+  assert.equal(config.choices.length, SUPPORTED_MODELS.length);
   assert.equal(config.choices[0]?.short, DEFAULT_MODEL.key);
+  assert.deepEqual(
+    config.choices.map((choice) => choice.value),
+    SUPPORTED_MODELS.map((model) => model.key),
+  );
 });
 
 test("buildScopePromptConfig keeps scope prompt structure centralized", () => {

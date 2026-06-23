@@ -1,0 +1,135 @@
+import { DEFAULT_MODEL } from "../../src/constants/models.js";
+import { type InstallArtifacts } from "../../src/install/install-artifacts.js";
+import {
+  createInstallUseCaseDependencies,
+  runInstallUseCase,
+  type InstallOutcome,
+  type InstallUseCaseDependencyOverrides,
+  type InstallUseCaseDependencies,
+} from "../../src/install/install-use-case.js";
+import {
+  DEFAULT_TEST_API_KEY,
+  DEFAULT_TEST_CODEX_VERSION,
+  createTestCodexAvailability,
+  createTestCodexEnvironment,
+  createTestInstallArtifacts,
+} from "./install-fixtures.js";
+import {
+  createTempWorkspace,
+  initGitRepo,
+  trackLocalProjectConfig,
+} from "./workspace.js";
+
+interface InstallDependencyOptions {
+  apiKey?: string;
+  codexHome: string;
+  codexVersion?: string;
+  promptScope: "user" | "local";
+  trackedLocalAction?: "user" | "cancel";
+}
+
+export interface InstallScenarioOptions {
+  apiKey?: string;
+  codexVersion?: string;
+  scope: "user" | "local";
+  trackedLocalAction?: "user" | "cancel";
+}
+
+export interface InstallScenarioRunOptions {
+  cwd?: string;
+  dependencies?: InstallUseCaseDependencies;
+  scope?: "user" | "local";
+}
+
+export interface InstallScenario {
+  codexHome: string;
+  createDependencies: (
+    overrides?: InstallUseCaseDependencyOverrides,
+  ) => InstallUseCaseDependencies;
+  initGitRepo: () => void;
+  installArtifacts: InstallArtifacts;
+  installPaths: InstallArtifacts["installPaths"];
+  run: (options?: InstallScenarioRunOptions) => Promise<InstallOutcome>;
+  trackLocalProjectConfig: (content?: string) => Promise<void>;
+  tokenCommand: InstallArtifacts["tokenCommand"];
+  workspace: string;
+}
+
+function createScenarioInputOverrides(options: InstallDependencyOptions) {
+  return {
+    checkCodexAvailable: () =>
+      createTestCodexAvailability(
+        options.codexVersion ?? DEFAULT_TEST_CODEX_VERSION,
+      ),
+    environment: createTestCodexEnvironment(options.codexHome, process.env),
+    promptForApiKey: async () => options.apiKey ?? DEFAULT_TEST_API_KEY,
+    promptForModel: async () => DEFAULT_MODEL,
+    promptForScope: async () => options.promptScope,
+    promptForTrackedLocalConfigAction: async () =>
+      options.trackedLocalAction ?? "cancel",
+  };
+}
+
+export async function createInstallScenario(
+  name: string,
+  options: InstallScenarioOptions,
+): Promise<InstallScenario> {
+  const workspace = await createTempWorkspace(`codex-setup-${name}-workspace`);
+  const codexHome = await createTempWorkspace(`codex-setup-${name}-home`);
+  const installArtifacts = createTestInstallArtifacts({
+    codexHome,
+    environment: process.env,
+    nodeExecutable: process.execPath,
+    platform: process.platform,
+    projectRoot: workspace,
+  });
+  const { installPaths, tokenCommand } = installArtifacts;
+  const scenarioInputOverrides = createScenarioInputOverrides({
+    apiKey: options.apiKey,
+    codexHome,
+    codexVersion: options.codexVersion,
+    promptScope: options.scope,
+    trackedLocalAction: options.trackedLocalAction,
+  });
+
+  const createDependencies = (
+    overrides: InstallUseCaseDependencyOverrides = {},
+  ): InstallUseCaseDependencies =>
+    createInstallUseCaseDependencies({
+      commit: overrides.commit,
+      input: {
+        ...scenarioInputOverrides,
+        ...overrides.input,
+      },
+      planning: overrides.planning,
+    });
+
+  const run = async (
+    runOptions: InstallScenarioRunOptions = {},
+  ): Promise<InstallOutcome> => {
+    const dependencies = runOptions.dependencies ?? createDependencies();
+    return runInstallUseCase(
+      {
+        cwd: runOptions.cwd ?? workspace,
+        scope: runOptions.scope ?? options.scope,
+      },
+      dependencies,
+    );
+  };
+
+  return {
+    codexHome,
+    createDependencies,
+    initGitRepo: () => {
+      initGitRepo(workspace);
+    },
+    installArtifacts,
+    installPaths,
+    run,
+    trackLocalProjectConfig: async (content?: string) => {
+      await trackLocalProjectConfig(workspace, content);
+    },
+    tokenCommand,
+    workspace,
+  };
+}

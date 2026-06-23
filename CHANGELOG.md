@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Updated bundled Kimi K2.6 `model_catalog_json` context window to the current
+  Gonka deployment value, `240000`.
 - Added `moonshotai/Kimi-K2.6` as the default curated GonkaGate Codex model
   and generated `model_catalog_json`.
 - Implemented the interactive Codex installer behind

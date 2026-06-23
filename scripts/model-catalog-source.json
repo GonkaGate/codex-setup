@@ -85,7 +85,7 @@
         "limit": 10000
       },
       "supports_parallel_tool_calls": false,
-      "context_window": 262144,
+      "context_window": 240000,
       "default_reasoning_summary": "auto",
       "slug": "moonshotai/Kimi-K2.6",
       "display_name": "Kimi K2.6",

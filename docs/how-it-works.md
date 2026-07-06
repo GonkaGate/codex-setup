@@ -15,23 +15,27 @@ npx @gonkagate/codex-setup
 1. Check that `codex` is available and that the installed Codex CLI is at
    least `0.118.0`.
 2. Prompt for a GonkaGate `gp-...` key through a hidden input.
-3. Choose a model from the curated registry bundled with this package.
-   Today that registry contains `moonshotai/Kimi-K2.6` (default) and
-   `gpt-5.4`.
-4. Choose `user` or `local` scope.
-5. Save the secret only under `~/.codex/...` (or `CODEX_HOME` when that env
+3. Fetch `GET https://api.gonkagate.com/v1/models` with bearer auth using the
+   user's key.
+4. Choose a model from the live `/v1/models` response. Non-interactive setup
+   uses the first returned model unless the response later exposes an explicit
+   default signal.
+5. Choose `user` or `local` scope.
+6. Save the secret only under `~/.codex/...` (or `CODEX_HOME` when that env
    var is set), never inside the repository.
-6. Write or update the helper token command under `~/.codex/bin/`.
-7. Write or update the curated `model_catalog_json` under
+7. Write or update the helper token command under `~/.codex/bin/`.
+8. Write or update the live `model_catalog_json` under
    `~/.codex/model-catalogs/gonkagate.json`.
-8. Write or update the user-level provider definition in
+9. Write or update the user-level provider definition in
    `~/.codex/config.toml`.
-9. When `local` scope is chosen:
-   - write only activation settings to `<project-root>/.codex/config.toml`
-   - set `projects."<abs-path>".trust_level = "trusted"` in user config
-   - keep the local config file out of git by default through `.git/info/exclude`
-10. Create backups before replacing existing managed config or token files.
-11. Tell the user to verify with `codex`, then `/status`, and fall back to
+10. When `local` scope is chosen:
+
+- write only activation settings to `<project-root>/.codex/config.toml`
+- set `projects."<abs-path>".trust_level = "trusted"` in user config
+- keep the local config file out of git by default through `.git/info/exclude`
+
+11. Create backups before replacing existing managed config or token files.
+12. Tell the user to verify with `codex`, then `/status`, and fall back to
     `/debug-config` if needed.
 
 ## Why A Custom Provider
@@ -61,15 +65,17 @@ That gives the product the intended UX:
 The implementation intentionally does not write directly to Codex auth storage
 internals such as `auth.json`.
 
-## Why Curated Models
+## Why Live Models
 
-The model picker does not depend on runtime `/v1/models` discovery as the main
-UX.
+The model picker uses `GET https://api.gonkagate.com/v1/models` with the
+user's API key as the source of truth. If GonkaGate adds or removes a model,
+the setup flow follows the live response without requiring a repository
+change.
 
-Instead, the installer ships curated Codex model metadata and writes a local
-`model_catalog_json` file. That keeps the onboarding surface stable even if the
-gateway model list changes or exposes ids that should not be part of the public
-setup experience.
+The installer still writes `model_catalog_json` because Codex reads model
+metadata from that file. Its entries are generated from the fetched model IDs
+plus generic capability defaults that apply to any returned model, not from a
+checked-in model allowlist.
 
 ## Scope Model
 

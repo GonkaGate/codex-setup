@@ -1,5 +1,5 @@
 import {
-  DEFAULT_MODEL,
+  createSupportedModel,
   type SupportedModel,
 } from "../../src/constants/models.js";
 import {
@@ -27,6 +27,11 @@ import type {
 
 export const DEFAULT_TEST_API_KEY = "gp-test-key-123456";
 export const DEFAULT_TEST_CODEX_VERSION = "0.118.0";
+export const TEST_MODELS: readonly SupportedModel[] = [
+  createSupportedModel("provider/live-codex-alpha", "Live Codex Alpha"),
+  createSupportedModel("provider/live-codex-beta", "Live Codex Beta"),
+];
+export const DEFAULT_TEST_MODEL = TEST_MODELS[0]!;
 export const TEST_PROJECT_ROOT = "/Users/test/project";
 export const TEST_CODEX_HOME = "/Users/test/.codex";
 export const TEST_NODE_EXECUTABLE = "/usr/bin/node";
@@ -42,6 +47,7 @@ interface TestInstallArtifactsOptions {
 
 interface CommonPreparedInstallContextFields {
   apiKey: string;
+  availableModels: readonly SupportedModel[];
   codex: PreparedInstallContext["codex"];
   installPaths: InstallPaths;
   requestedScope: InstallScope;
@@ -117,10 +123,11 @@ function createCommonPreparedInstallContextFields(
 ): CommonPreparedInstallContextFields {
   return {
     apiKey: DEFAULT_TEST_API_KEY,
+    availableModels: TEST_MODELS,
     codex: overrides.codex ?? createTestCodexAvailability(),
     installPaths: TEST_INSTALL_PATHS,
     requestedScope: overrides.requestedScope ?? defaultRequestedScope,
-    selectedModel: overrides.selectedModel ?? DEFAULT_MODEL,
+    selectedModel: overrides.selectedModel ?? DEFAULT_TEST_MODEL,
     tokenCommand: TEST_TOKEN_COMMAND,
   };
 }

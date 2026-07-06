@@ -30,7 +30,9 @@ integration will not be viable.
 
 Codex does not have a Claude Code-style repo-local secret layer. To keep the
 repository settings safe, the secret still lives in `~/.codex/...`, while the
-repo-local file only activates provider, model, and catalog selection.
+repo-local file only activates provider, model, and catalog selection. Model
+availability comes from `GET https://api.gonkagate.com/v1/models` with the
+user's API key.
 
 ## What if `.codex/config.toml` is already tracked?
 

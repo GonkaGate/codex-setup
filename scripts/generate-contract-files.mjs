@@ -86,8 +86,6 @@ export function renderContractDefinitionsModule({
     ...renderGeneratedHeader({
       sourceLabels: [formatSourceLabel(sourcePath)],
     }),
-    `export const SUPPORTED_MODELS_CONTRACT = ${JSON.stringify(source.supportedModels, null, 2)};`,
-    "",
     `export const VERIFIED_CODEX_CONTRACT = ${JSON.stringify(source.verifiedCodex, null, 2)};`,
     "",
   ].join("\n");
@@ -107,11 +105,6 @@ export function renderContractDefinitionsDeclaration({
     ...renderGeneratedHeader({
       sourceLabels: [formatSourceLabel(sourcePath)],
     }),
-    `export const SUPPORTED_MODELS_CONTRACT: ${renderDeclarationLiteral(source.supportedModels)};`,
-    "",
-    "export type SupportedModelContractDefinition =",
-    "  (typeof SUPPORTED_MODELS_CONTRACT)[number];",
-    "",
     `export const VERIFIED_CODEX_CONTRACT: ${renderDeclarationLiteral(source.verifiedCodex)};`,
     "",
     "export type VerifiedCodexContractDefinition = typeof VERIFIED_CODEX_CONTRACT;",
@@ -137,7 +130,7 @@ export function renderContractMetadataModule({
         formatSourceLabel(sourcePath),
       ],
     }),
-    'import { SUPPORTED_MODELS_CONTRACT, VERIFIED_CODEX_CONTRACT } from "./contract-definitions.js";',
+    'import { VERIFIED_CODEX_CONTRACT } from "./contract-definitions.js";',
     "",
     "export const CONTRACT_METADATA = {",
     `  binName: ${JSON.stringify(packageMetadata.binName)},`,
@@ -145,7 +138,6 @@ export function renderContractMetadataModule({
     `  cliVersion: ${JSON.stringify(packageMetadata.cliVersion)},`,
     `  packageName: ${JSON.stringify(packageMetadata.packageName)},`,
     `  publicEntrypoint: ${JSON.stringify(packageMetadata.publicEntrypoint)},`,
-    "  supportedModels: SUPPORTED_MODELS_CONTRACT,",
     "  verifiedCodex: VERIFIED_CODEX_CONTRACT,",
     "};",
     "",
@@ -176,7 +168,6 @@ export function renderContractMetadataDeclaration({
     `  readonly cliVersion: ${renderDeclarationLiteral(packageMetadata.cliVersion)};`,
     `  readonly packageName: ${renderDeclarationLiteral(packageMetadata.packageName)};`,
     `  readonly publicEntrypoint: ${renderDeclarationLiteral(packageMetadata.publicEntrypoint)};`,
-    '  readonly supportedModels: typeof import("./contract-definitions.js").SUPPORTED_MODELS_CONTRACT;',
     '  readonly verifiedCodex: typeof import("./contract-definitions.js").VERIFIED_CODEX_CONTRACT;',
     "}",
     "",
@@ -265,59 +256,6 @@ export async function writeContractFiles({
 function assertContractSourceShape(source, sourcePath) {
   if (typeof source !== "object" || source === null || Array.isArray(source)) {
     throw new Error(`Expected ${sourcePath} to contain an object.`);
-  }
-
-  if (
-    !Array.isArray(source.supportedModels) ||
-    source.supportedModels.length < 1
-  ) {
-    throw new Error(
-      `Expected ${sourcePath} to contain a non-empty "supportedModels" array.`,
-    );
-  }
-
-  for (const [index, model] of source.supportedModels.entries()) {
-    if (typeof model !== "object" || model === null || Array.isArray(model)) {
-      throw new Error(
-        `Expected supportedModels[${index}] in ${sourcePath} to be an object.`,
-      );
-    }
-
-    assertNonEmptyString(
-      model.key,
-      `${sourcePath} supportedModels[${index}].key`,
-    );
-    assertNonEmptyString(
-      model.displayName,
-      `${sourcePath} supportedModels[${index}].displayName`,
-    );
-    assertNonEmptyString(
-      model.modelId,
-      `${sourcePath} supportedModels[${index}].modelId`,
-    );
-
-    if (model.description !== undefined) {
-      assertNonEmptyString(
-        model.description,
-        `${sourcePath} supportedModels[${index}].description`,
-      );
-    }
-
-    if (typeof model.isDefault !== "boolean") {
-      throw new Error(
-        `Expected ${sourcePath} supportedModels[${index}].isDefault to be a boolean.`,
-      );
-    }
-  }
-
-  const defaultModelCount = source.supportedModels.filter(
-    (model) => model.isDefault,
-  ).length;
-
-  if (defaultModelCount !== 1) {
-    throw new Error(
-      `Expected ${sourcePath} to declare exactly one default supported model, found ${defaultModelCount}.`,
-    );
   }
 
   if (

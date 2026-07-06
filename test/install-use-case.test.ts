@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { DEFAULT_MODEL, SUPPORTED_MODELS } from "../src/constants/models.js";
+import { createSupportedModel } from "../src/constants/models.js";
 import { buildBackupGlob } from "../src/install/backup.js";
 import { InstallCommitError } from "../src/install/install-errors.js";
 import { LOCAL_PROJECT_CONFIG_RELATIVE_PATH } from "../src/install/settings-paths.js";
@@ -17,6 +17,7 @@ import {
 } from "./helpers/install-config-assertions.js";
 import {
   DEFAULT_TEST_API_KEY,
+  TEST_MODELS,
   createLoadedTomlConfig,
 } from "./helpers/install-fixtures.js";
 import {
@@ -50,8 +51,9 @@ async function seedExistingUserManagedFiles(
   await writeFile(scenario.installPaths.tokenPath, input.tokenText, "utf8");
 }
 
-test("user scope writes GonkaGate provider, token helper, and curated catalog", async () => {
+test("user scope writes GonkaGate provider, token helper, and live catalog", async () => {
   const scenario = await createInstallScenario("user", {
+    models: TEST_MODELS,
     scope: "user",
   });
 
@@ -60,6 +62,7 @@ test("user scope writes GonkaGate provider, token helper, and curated catalog", 
   assert.equal(outcome.finalScope, "user");
   assert.equal("configLayers" in outcome, false);
   assert.equal(outcome.projectConfigPath, undefined);
+  assert.equal(outcome.selectedModel.modelId, TEST_MODELS[0]?.modelId);
 
   const userConfig = parseTomlTable(
     await readFile(outcome.userConfigPath, "utf8"),
@@ -93,7 +96,7 @@ test("user scope writes GonkaGate provider, token helper, and curated catalog", 
         `modelCatalog.models[${index}].slug`,
       ),
     ),
-    SUPPORTED_MODELS.map((model) => model.modelId),
+    TEST_MODELS.map((model) => model.modelId),
   );
 
   assert.deepEqual(
@@ -108,6 +111,66 @@ test("user scope writes GonkaGate provider, token helper, and curated catalog", 
   assert.equal(
     outcome.writes.every((write) => write.changed),
     true,
+  );
+});
+
+test("requested model is validated against fetched GonkaGate models", async () => {
+  const liveOnlyModel = createSupportedModel(
+    "provider/live-only-codex-9000",
+    "Live Only Codex 9000",
+  );
+  const scenario = await createInstallScenario("live-model", {
+    models: [createSupportedModel("provider/live-codex-8999"), liveOnlyModel],
+    scope: "user",
+  });
+
+  const outcome = await scenario.run({
+    modelKey: liveOnlyModel.key,
+  });
+  const userConfig = parseTomlTable(
+    await readFile(outcome.userConfigPath, "utf8"),
+  );
+  expectGonkagateActivationConfig(userConfig, {
+    configLabel: "userConfig",
+    modelCatalogPath: outcome.modelCatalogPath,
+    modelId: liveOnlyModel.modelId,
+  });
+
+  const modelCatalog = parseJsonObject(
+    await readFile(outcome.modelCatalogPath, "utf8"),
+    "model catalog",
+  );
+  const modelCatalogModels = expectJsonArray(
+    modelCatalog.models,
+    "modelCatalog.models",
+  );
+  assert.deepEqual(
+    modelCatalogModels.map((model, index) =>
+      expectJsonString(
+        expectJsonObject(model, `modelCatalog.models[${index}]`).slug,
+        `modelCatalog.models[${index}].slug`,
+      ),
+    ),
+    ["provider/live-codex-8999", liveOnlyModel.modelId],
+  );
+});
+
+test("unknown requested model stops before managed writes", async () => {
+  const scenario = await createInstallScenario("unknown-model", {
+    models: TEST_MODELS,
+    scope: "user",
+  });
+
+  await assert.rejects(
+    () =>
+      scenario.run({
+        modelKey: "provider/not-returned-by-models",
+      }),
+    /Unsupported GonkaGate model id/,
+  );
+  await assert.rejects(
+    () => readFile(scenario.installPaths.tokenPath, "utf8"),
+    /ENOENT/,
   );
 });
 

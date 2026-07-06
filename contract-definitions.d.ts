@@ -2,26 +2,6 @@
 // Source snapshot: scripts/contract-source.json
 // Do not edit by hand.
 
-export const SUPPORTED_MODELS_CONTRACT: readonly [
-  {
-    readonly key: "moonshotai/Kimi-K2.6";
-    readonly displayName: "Kimi K2.6";
-    readonly modelId: "moonshotai/Kimi-K2.6";
-    readonly description: "Moonshot AI multimodal agentic coding model for long-horizon tasks.";
-    readonly isDefault: true;
-  },
-  {
-    readonly key: "gpt-5.4";
-    readonly displayName: "GPT-5.4";
-    readonly modelId: "gpt-5.4";
-    readonly description: "Current validated GonkaGate model for Codex CLI.";
-    readonly isDefault: false;
-  },
-];
-
-export type SupportedModelContractDefinition =
-  (typeof SUPPORTED_MODELS_CONTRACT)[number];
-
 export const VERIFIED_CODEX_CONTRACT: {
   readonly minVersion: "0.118.0";
   readonly modelCatalogVersion: "rust-v0.118.0";

@@ -19,15 +19,14 @@ test("README captures the current Codex installer decisions", () => {
     /\.codex\/config\.toml/,
     new RegExp(escapeRegExp(`model_provider = "${GONKAGATE_PROVIDER_ID}"`)),
     new RegExp(escapeRegExp(GONKAGATE_BASE_URL)),
+    /\/v1\/models/,
     /wire_api = "responses"/,
     /model_catalog_json/,
     /command-backed bearer token/i,
     new RegExp(escapeRegExp(CONTRACT_METADATA.verifiedCodex.minVersion)),
   ]);
 
-  for (const model of CONTRACT_METADATA.supportedModels) {
-    assertMatchesAll(readme, [new RegExp(escapeRegExp(model.modelId))]);
-  }
+  assertMatchesAll(readme, [/source of truth/i]);
 });
 
 test("AGENTS captures the repository contract anchors", () => {
@@ -43,6 +42,7 @@ test("AGENTS captures the repository contract anchors", () => {
     /auth\.json/,
     /installer is implemented/i,
     new RegExp(escapeRegExp(CONTRACT_METADATA.verifiedCodex.minVersion)),
+    /\/v1\/models/,
     /test\/docs-contract\.test\.ts/,
   ]);
 });
@@ -54,6 +54,7 @@ test("implementation docs capture current install and troubleshooting anchors", 
   assertMatchesAll(howItWorks, [
     new RegExp(escapeRegExp(CONTRACT_METADATA.publicEntrypoint)),
     new RegExp(escapeRegExp(CONTRACT_METADATA.verifiedCodex.minVersion)),
+    /\/v1\/models/,
     /wire_api = "responses"/,
     /model_catalog_json/,
   ]);

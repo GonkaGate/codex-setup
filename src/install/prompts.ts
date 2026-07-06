@@ -24,7 +24,7 @@ export function buildModelPromptConfig(
   if (models.length === 0) {
     throw new PromptError(
       "no_supported_models",
-      "No supported GonkaGate Codex models are configured.",
+      "GonkaGate /v1/models returned no models.",
     );
   }
 
@@ -35,9 +35,7 @@ export function buildModelPromptConfig(
       const modelIdDescription = `Model ID: ${model.modelId}`;
 
       return {
-        description: model.description
-          ? `${model.description} ${modelIdDescription}`
-          : modelIdDescription,
+        description: modelIdDescription,
         name: model.displayName,
         short: model.key,
         value: model.key,
@@ -152,7 +150,7 @@ function requireModel(
   if (!selectedModel) {
     throw new PromptError(
       "model_registry_mismatch",
-      `Configured model "${key}" is not present in the curated model registry.`,
+      `Configured model "${key}" was not returned by GonkaGate /v1/models.`,
     );
   }
 

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_MODEL } from "../src/constants/models.js";
 import {
   planInstallManagedWritePhases,
   planInstallManagedWrites,
@@ -10,7 +9,9 @@ import {
 import type { InstallScope } from "../src/install/settings-paths.js";
 import {
   DEFAULT_TEST_API_KEY,
+  DEFAULT_TEST_MODEL,
   TEST_INSTALL_PATHS,
+  TEST_MODELS,
   TEST_TOKEN_COMMAND,
   createLoadedTomlConfig,
 } from "./helpers/install-fixtures.js";
@@ -20,10 +21,11 @@ function createPlanInput(
 ): PlanInstallManagedWritesInput {
   return {
     apiKey: DEFAULT_TEST_API_KEY,
+    availableModels: TEST_MODELS,
     finalScope,
     installPaths: TEST_INSTALL_PATHS,
     loadTomlConfig: async (filePath) => createLoadedTomlConfig(filePath, {}),
-    selectedModel: DEFAULT_MODEL,
+    selectedModel: DEFAULT_TEST_MODEL,
     tokenCommand: TEST_TOKEN_COMMAND,
   };
 }

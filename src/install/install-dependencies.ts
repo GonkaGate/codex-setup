@@ -2,6 +2,7 @@ import { createBackup } from "./backup.js";
 import { checkCodexAvailable } from "./codex-command.js";
 import { ensureLocalProjectConfigExcluded } from "./local-git-ignore.js";
 import { inspectLocalProjectConfig } from "./local-project-config.js";
+import { fetchGonkagateModels } from "./model-discovery.js";
 import {
   promptForApiKey,
   promptForModel,
@@ -18,6 +19,7 @@ import {
 export interface InstallInputDependencies {
   checkCodexAvailable: typeof checkCodexAvailable;
   environment: NodeJS.ProcessEnv;
+  fetchGonkagateModels: typeof fetchGonkagateModels;
   inspectLocalProjectConfig: typeof inspectLocalProjectConfig;
   promptForApiKey: typeof promptForApiKey;
   promptForModel: typeof promptForModel;
@@ -54,6 +56,7 @@ export interface InstallUseCaseDependencyOverrides {
 const defaultInstallInputDependencies = {
   checkCodexAvailable,
   environment: process.env,
+  fetchGonkagateModels,
   inspectLocalProjectConfig,
   promptForApiKey,
   promptForModel,

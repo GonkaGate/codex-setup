@@ -1,4 +1,3 @@
-import { type SupportedModelKey } from "../constants/models.js";
 import {
   createInstallUseCaseDependencies,
   defaultInstallUseCaseDependencies,
@@ -24,7 +23,7 @@ export type {
 
 export interface InstallRequest {
   cwd: string;
-  modelKey?: SupportedModelKey;
+  modelKey?: string;
   scope?: InstallScope;
 }
 

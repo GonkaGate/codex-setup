@@ -5,30 +5,21 @@ import test from "node:test";
 import { CONTRACT_METADATA } from "../contract-metadata.js";
 import { formatIntroOutput, formatSuccessOutput } from "../src/cli-output.js";
 import { GONKAGATE_BASE_URL } from "../src/constants/gateway.js";
-import {
-  DEFAULT_MODEL_KEY,
-  SUPPORTED_MODELS,
-} from "../src/constants/models.js";
 import { parseCliOptions } from "../src/cli.js";
 import { LOCAL_PROJECT_CONFIG_RELATIVE_PATH } from "../src/install/settings-paths.js";
 import { escapeRegExp, repoRoot } from "./contract-helpers.js";
 import { createTestInstallOutcome } from "./helpers/install-fixtures.js";
 
-test("parseCliOptions reads curated model and scope flags", () => {
-  const kimiModel = SUPPORTED_MODELS.find(
-    (model) => model.modelId === "moonshotai/Kimi-K2.6",
-  );
-  assert.ok(kimiModel);
-
+test("parseCliOptions reads model id and scope flags", () => {
   const options = parseCliOptions([
     "--scope",
     "local",
     "--model",
-    kimiModel.key,
+    "provider/live-codex-alpha",
   ]);
 
   assert.equal(options.scope, "local");
-  assert.equal(options.modelKey, kimiModel.key);
+  assert.equal(options.modelKey, "provider/live-codex-alpha");
 });
 
 test("parseCliOptions rejects API key flags", () => {
@@ -48,7 +39,8 @@ test("CLI wrapper exposes the implemented installer entrypoint", () => {
   assert.equal(helpResult.status, 0);
   assert.match(helpResult.stdout, /GonkaGate Codex CLI installer/i);
   assert.match(helpResult.stdout, /--scope <scope>/);
-  assert.match(helpResult.stdout, /--model <model-key>/);
+  assert.match(helpResult.stdout, /--model <model-id>/);
+  assert.match(helpResult.stdout, /\/v1\/models/);
   assert.match(
     helpResult.stdout,
     new RegExp(escapeRegExp(CONTRACT_METADATA.publicEntrypoint)),
@@ -71,10 +63,7 @@ test("formatIntroOutput keeps installer framing separate from command parsing", 
 
   assert.match(output, /Connect Codex CLI to GonkaGate in one step\./);
   assert.match(output, new RegExp(escapeRegExp(GONKAGATE_BASE_URL)));
-  assert.match(
-    output,
-    /Curated model choices: moonshotai\/Kimi-K2\.6, gpt-5\.4\./,
-  );
+  assert.match(output, /Models are fetched from GonkaGate \/v1\/models/);
 });
 
 test("formatSuccessOutput groups optional sections without mixing concerns", () => {

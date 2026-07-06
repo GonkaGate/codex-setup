@@ -8,7 +8,6 @@ export interface ContractMetadata {
   readonly cliVersion: "0.1.0";
   readonly packageName: "@gonkagate/codex-setup";
   readonly publicEntrypoint: "npx @gonkagate/codex-setup";
-  readonly supportedModels: typeof import("./contract-definitions.js").SUPPORTED_MODELS_CONTRACT;
   readonly verifiedCodex: typeof import("./contract-definitions.js").VERIFIED_CODEX_CONTRACT;
 }
 

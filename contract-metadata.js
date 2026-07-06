@@ -2,10 +2,7 @@
 // Source snapshot: package.json + scripts/contract-source.json
 // Do not edit by hand.
 
-import {
-  SUPPORTED_MODELS_CONTRACT,
-  VERIFIED_CODEX_CONTRACT,
-} from "./contract-definitions.js";
+import { VERIFIED_CODEX_CONTRACT } from "./contract-definitions.js";
 
 export const CONTRACT_METADATA = {
   binName: "gonkagate-codex",
@@ -13,6 +10,5 @@ export const CONTRACT_METADATA = {
   cliVersion: "0.1.0",
   packageName: "@gonkagate/codex-setup",
   publicEntrypoint: "npx @gonkagate/codex-setup",
-  supportedModels: SUPPORTED_MODELS_CONTRACT,
   verifiedCodex: VERIFIED_CODEX_CONTRACT,
 };

@@ -41,10 +41,6 @@ test("package metadata matches the installer contract", () => {
     CONTRACT_METADATA.binPath,
   );
   assert.match(
-    packageJsonScripts["model-catalog:generate"],
-    /scripts\/extract-model-catalog\.mjs/,
-  );
-  assert.match(
     packageJsonScripts["contract:generate"],
     /scripts\/generate-contract-files\.mjs/,
   );
@@ -52,15 +48,13 @@ test("package metadata matches the installer contract", () => {
     packageJsonScripts["contract:check"],
     /scripts\/check-contract-files\.mjs/,
   );
-  assert.match(
-    packageJsonScripts["model-catalog:check"],
-    /scripts\/check-model-catalog\.mjs/,
-  );
+  assert.equal(packageJsonScripts["model-catalog:generate"], undefined);
+  assert.equal(packageJsonScripts["model-catalog:check"], undefined);
   assert.match(packageJsonScripts.test, /npm run build/);
   assert.match(packageJsonScripts.ci, /npm run typecheck/);
   assert.match(packageJsonScripts.ci, /npm run test/);
   assert.match(packageJsonScripts.ci, /npm run contract:check/);
-  assert.match(packageJsonScripts.ci, /npm run model-catalog:check/);
+  assert.equal(packageJsonScripts.ci.includes("model-catalog"), false);
   assert.match(packageJsonScripts.ci, /npm run package:check/);
 });
 

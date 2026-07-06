@@ -3,22 +3,17 @@ import { pathToFileURL } from "node:url";
 import { Command, CommanderError, Option } from "commander";
 import { CONTRACT_METADATA } from "../contract-metadata.js";
 import { formatIntroOutput, formatSuccessOutput } from "./cli-output.js";
-import {
-  DEFAULT_MODEL_KEY,
-  SUPPORTED_MODELS,
-  SUPPORTED_MODEL_KEYS,
-} from "./constants/models.js";
 import { describeUnknownError } from "./install/error-codes.js";
 import { runInstallUseCase } from "./install/install-use-case.js";
 import type { InstallScope } from "./install/settings-paths.js";
 
 export interface CliOptions {
-  modelKey?: (typeof SUPPORTED_MODEL_KEYS)[number];
+  modelKey?: string;
   scope?: InstallScope;
 }
 
 interface ParsedProgramOptions {
-  model?: (typeof SUPPORTED_MODEL_KEYS)[number];
+  model?: string;
   scope?: InstallScope;
 }
 
@@ -36,19 +31,14 @@ function rejectApiKeyArgs(argv: string[]): void {
 }
 
 function createProgram(output?: ProgramOutput): Command {
-  const supportedModelLines = SUPPORTED_MODELS.map((model) => {
-    const defaultSuffix = model.key === DEFAULT_MODEL_KEY ? " (default)" : "";
-    return `  ${model.key}  ${model.displayName}${defaultSuffix}`;
-  }).join("\n");
-
   const program = new Command()
     .name(CONTRACT_METADATA.binName)
     .description("GonkaGate Codex CLI installer")
     .addOption(
       new Option(
-        "--model <model-key>",
-        "Skip the model prompt with a curated supported model.",
-      ).choices(SUPPORTED_MODEL_KEYS),
+        "--model <model-id>",
+        "Skip the model prompt with a GonkaGate model id returned by /v1/models.",
+      ),
     )
     .addOption(
       new Option(
@@ -68,10 +58,9 @@ function createProgram(output?: ProgramOutput): Command {
 Examples:
   ${CONTRACT_METADATA.publicEntrypoint}
   ${CONTRACT_METADATA.publicEntrypoint} --scope local
-  ${CONTRACT_METADATA.publicEntrypoint} --model ${DEFAULT_MODEL_KEY}
+  ${CONTRACT_METADATA.publicEntrypoint} --model <model-id>
 
-Supported model keys:
-${supportedModelLines}
+Models are fetched from GonkaGate /v1/models after the API key prompt.
 `,
     )
     .exitOverride();

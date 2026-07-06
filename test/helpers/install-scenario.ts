@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL } from "../../src/constants/models.js";
+import { type SupportedModel } from "../../src/constants/models.js";
 import { type InstallArtifacts } from "../../src/install/install-artifacts.js";
 import {
   createInstallUseCaseDependencies,
@@ -13,6 +13,8 @@ import {
   createTestCodexAvailability,
   createTestCodexEnvironment,
   createTestInstallArtifacts,
+  DEFAULT_TEST_MODEL,
+  TEST_MODELS,
 } from "./install-fixtures.js";
 import {
   createTempWorkspace,
@@ -24,6 +26,7 @@ interface InstallDependencyOptions {
   apiKey?: string;
   codexHome: string;
   codexVersion?: string;
+  models?: readonly SupportedModel[];
   promptScope: "user" | "local";
   trackedLocalAction?: "user" | "cancel";
 }
@@ -31,6 +34,7 @@ interface InstallDependencyOptions {
 export interface InstallScenarioOptions {
   apiKey?: string;
   codexVersion?: string;
+  models?: readonly SupportedModel[];
   scope: "user" | "local";
   trackedLocalAction?: "user" | "cancel";
 }
@@ -38,6 +42,7 @@ export interface InstallScenarioOptions {
 export interface InstallScenarioRunOptions {
   cwd?: string;
   dependencies?: InstallUseCaseDependencies;
+  modelKey?: string;
   scope?: "user" | "local";
 }
 
@@ -62,8 +67,10 @@ function createScenarioInputOverrides(options: InstallDependencyOptions) {
         options.codexVersion ?? DEFAULT_TEST_CODEX_VERSION,
       ),
     environment: createTestCodexEnvironment(options.codexHome, process.env),
+    fetchGonkagateModels: async () => [...(options.models ?? TEST_MODELS)],
     promptForApiKey: async () => options.apiKey ?? DEFAULT_TEST_API_KEY,
-    promptForModel: async () => DEFAULT_MODEL,
+    promptForModel: async (models: readonly SupportedModel[]) =>
+      models[0] ?? DEFAULT_TEST_MODEL,
     promptForScope: async () => options.promptScope,
     promptForTrackedLocalConfigAction: async () =>
       options.trackedLocalAction ?? "cancel",
@@ -88,6 +95,7 @@ export async function createInstallScenario(
     apiKey: options.apiKey,
     codexHome,
     codexVersion: options.codexVersion,
+    models: options.models,
     promptScope: options.scope,
     trackedLocalAction: options.trackedLocalAction,
   });
@@ -111,6 +119,7 @@ export async function createInstallScenario(
     return runInstallUseCase(
       {
         cwd: runOptions.cwd ?? workspace,
+        modelKey: runOptions.modelKey,
         scope: runOptions.scope ?? options.scope,
       },
       dependencies,

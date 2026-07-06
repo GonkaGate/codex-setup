@@ -4,7 +4,6 @@ import {
   GONKAGATE_PROVIDER_ID,
   GONKAGATE_PROVIDER_NAME,
 } from "../../src/constants/gateway.js";
-import { DEFAULT_MODEL } from "../../src/constants/models.js";
 import type { TomlTable } from "../../src/install/toml-config.js";
 import {
   expectTomlBoolean,
@@ -13,6 +12,7 @@ import {
   expectTomlTable,
 } from "./structured-data.js";
 import type { TokenCommandConfig } from "../../src/install/token-helper.js";
+import { DEFAULT_TEST_MODEL } from "./install-fixtures.js";
 
 interface ActivationConfigExpectation {
   configLabel?: string;
@@ -38,7 +38,7 @@ export function expectGonkagateActivationConfig(
   );
   assert.equal(
     expectTomlString(config.model, `${configLabel}.model`),
-    expectation.modelId ?? DEFAULT_MODEL.modelId,
+    expectation.modelId ?? DEFAULT_TEST_MODEL.modelId,
   );
   assert.equal(
     expectTomlString(

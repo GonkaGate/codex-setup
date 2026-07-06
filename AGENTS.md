@@ -26,8 +26,8 @@ Current honest state:
 - the installer is implemented for Codex CLI
 - the current bin surface is `gonkagate-codex`
 - the runtime lives under `src/` and is compiled to `dist/`
-- the current curated model registry contains two Codex model choices:
-  `moonshotai/Kimi-K2.6` (default) and `gpt-5.4`
+- model availability is fetched from
+  `GET https://api.gonkagate.com/v1/models` with the user's API key
 - the current verified upstream baseline is stable `@openai/codex` `0.118.0`
   as of April 2, 2026
 
@@ -41,10 +41,11 @@ The intended happy path is:
 
 1. user runs `npx @gonkagate/codex-setup`
 2. installer prompts for a hidden GonkaGate `gp-...` key
-3. installer offers a curated model picker
-4. installer asks for `user` or `local` scope
-5. installer writes the necessary Codex configuration layers
-6. user returns to plain `codex`
+3. installer fetches `GET https://api.gonkagate.com/v1/models` with bearer auth
+4. installer offers a live model picker from the fetched response
+5. installer asks for `user` or `local` scope
+6. installer writes the necessary Codex configuration layers
+7. user returns to plain `codex`
 
 For `local` scope, the secret still lives only under `~/.codex/...`, while the
 repo-local `.codex/config.toml` contains only activation settings.
@@ -72,8 +73,10 @@ refactor; it is a product change.
 - repo-local `.codex/config.toml` should contain only local activation settings
 - `projects."<abs-path>".trust_level = "trusted"` may need to be set in user
   config when local scope is selected
-- model selection should come from a curated registry and `model_catalog_json`,
-  not from raw `/v1/models` discovery as the main UX
+- model selection comes from `GET https://api.gonkagate.com/v1/models` with the
+  user's API key
+- `model_catalog_json` is generated from fetched model IDs plus generic
+  capability defaults, not from a checked-in model allowlist
 - v1 targets Codex CLI first
 - Codex Desktop App support is best-effort, not a guaranteed contract
 - shell profile mutation is out of scope
@@ -105,12 +108,9 @@ These are implementation facts today, not future plans:
   - `~/.codex/bin/gonkagate-token`
   - `~/.codex/model-catalogs/gonkagate.json`
   - `<project-root>/.codex/config.toml` for local scope only
-- the current curated model catalog includes `gpt-5.4` and
-  `moonshotai/Kimi-K2.6`
-- `scripts/model-catalog-source.json` is the committed curated source snapshot
-  for regenerating `src/constants/model-catalog.ts`
-- `scripts/check-model-catalog.mjs` and `test/models.test.ts` guard against
-  drift between the committed source snapshot and generated catalog module
+- model IDs are discovered at install time from GonkaGate `/v1/models`
+- `test/model-discovery.test.ts` and `test/install-use-case.test.ts` cover live
+  model parsing, dynamic selection, and live `model_catalog_json` writes
 - `test/install-use-case.test.ts` covers real file-writing behavior on temp
   filesystems and git repos
 - `test/package-contract.test.ts`, `test/docs-contract.test.ts`, and
@@ -131,7 +131,8 @@ This repo currently does:
 - install and configure Codex CLI for GonkaGate
 - write `~/.codex/config.toml`
 - write `<project-root>/.codex/config.toml` for local scope
-- generate `model_catalog_json` from a curated bundled registry
+- fetch live GonkaGate models with the user's API key
+- generate `model_catalog_json` from the live model IDs plus generic defaults
 - create a helper auth command under `~/.codex/bin/`
 - preserve unrelated Codex config via TOML merge
 - create backups before replacing managed config or token files
@@ -169,9 +170,6 @@ This repo currently does not do:
 │   ├── security.md
 │   └── troubleshooting.md
 ├── scripts/
-│   ├── check-model-catalog.mjs
-│   ├── extract-model-catalog.mjs
-│   ├── model-catalog-source.json
 │   └── run-tests.mjs
 ├── src/
 │   ├── cli.ts
@@ -219,20 +217,10 @@ The main installer flow and public CLI behavior.
 Runtime implementation for prompts, TOML config merge, git safety, helper
 command generation, and managed file writes.
 
-### `scripts/extract-model-catalog.mjs`
-
-Regenerates the bundled curated model catalog from the committed source
-snapshot under `scripts/model-catalog-source.json`.
-
-### `scripts/check-model-catalog.mjs`
-
-Verifies that the committed generated model catalog still matches the source
-snapshot and generator output.
-
 ### `test/install-use-case.test.ts`
 
 The main runtime behavior proof slice for config writing, local scope, tracked
-project config fallback, and backups.
+project config fallback, backups, and live model catalog behavior.
 
 ### `.claude/skills/` and `.agents/skills/`
 

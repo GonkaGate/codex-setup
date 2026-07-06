@@ -15,11 +15,10 @@ What the installer does today:
 - checks that `codex` is available and that the local Codex CLI is at least
   `0.118.0`
 - prompts for a hidden GonkaGate `gp-...` key
-- uses a curated model registry bundled with this package
-- currently ships curated Codex model choices: `moonshotai/Kimi-K2.6`
-  (default) and `gpt-5.4`
+- fetches `GET https://api.gonkagate.com/v1/models` with that key
+- uses the live `/v1/models` response as the model source of truth
 - asks whether GonkaGate should be activated in `user` or `local` scope
-- keeps the secret, helper command, and curated model catalog under
+- keeps the secret, helper command, and live model catalog under
   `~/.codex/...` by default, or under `CODEX_HOME` when that env var is set
 - writes or updates the necessary Codex config layers
 - creates backups before replacing existing managed files
@@ -30,11 +29,11 @@ What the installer does today:
 
 - writes provider config, model activation, and `model_catalog_json` to
   `~/.codex/config.toml`
-- keeps the token file, helper command, and curated catalog under `~/.codex/...`
+- keeps the token file, helper command, and live catalog under `~/.codex/...`
 
 `local` scope:
 
-- still keeps the secret, helper command, and curated catalog under `~/.codex/...`
+- still keeps the secret, helper command, and live catalog under `~/.codex/...`
 - writes only activation settings to `<project-root>/.codex/config.toml`
 - writes the provider definition and
   `projects."<abs-path>".trust_level = "trusted"` to user config
@@ -49,7 +48,7 @@ What the installer does today:
 
 ```toml
 model_provider = "gonkagate"
-model = "moonshotai/Kimi-K2.6"
+model = "model-id-returned-by-v1-models"
 model_catalog_json = "/Users/you/.codex/model-catalogs/gonkagate.json"
 
 [model_providers.gonkagate]
@@ -65,7 +64,7 @@ trust entry, while `<project-root>/.codex/config.toml` activates:
 
 ```toml
 model_provider = "gonkagate"
-model = "moonshotai/Kimi-K2.6"
+model = "model-id-returned-by-v1-models"
 model_catalog_json = "/Users/you/.codex/model-catalogs/gonkagate.json"
 ```
 
@@ -80,8 +79,10 @@ model_catalog_json = "/Users/you/.codex/model-catalogs/gonkagate.json"
 - The auth path is command-backed bearer token retrieval through
   `model_providers.<id>.auth`.
 - The installer never writes directly to `auth.json`.
-- Model selection comes from a curated registry and `model_catalog_json`, not
-  raw `/v1/models` discovery.
+- Model selection comes from `GET https://api.gonkagate.com/v1/models` with
+  the user's API key.
+- The installer writes `model_catalog_json` from the live model IDs plus
+  generic Codex capability defaults, not from a checked-in allowlist.
 - v1 targets Codex CLI first. Desktop app behavior is best-effort rather than
   a product promise.
 

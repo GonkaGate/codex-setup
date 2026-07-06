@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_MODEL } from "../src/constants/models.js";
 import {
   buildInstallConfigPlan,
   planInstallConfigWrites,
@@ -21,6 +20,7 @@ import {
 } from "./helpers/install-config-assertions.js";
 import {
   TEST_CODEX_HOME,
+  DEFAULT_TEST_MODEL,
   TEST_INSTALL_PATHS,
   TEST_TOKEN_COMMAND,
   createLoadedTomlConfig,
@@ -45,7 +45,7 @@ test("planInstallConfigWrites keeps user scope config ownership centralized", as
     paths: {
       ...testPaths,
     },
-    selectedModel: DEFAULT_MODEL,
+    selectedModel: DEFAULT_TEST_MODEL,
     tokenCommand: TEST_TOKEN_COMMAND,
   });
 
@@ -93,7 +93,7 @@ test("planInstallConfigWrites splits local scope across user and project layers"
     paths: {
       ...testPaths,
     },
-    selectedModel: DEFAULT_MODEL,
+    selectedModel: DEFAULT_TEST_MODEL,
     tokenCommand: TEST_TOKEN_COMMAND,
   });
 
@@ -140,7 +140,7 @@ test("planInstallConfigWrites only loads config files for the active scope layer
     paths: {
       ...testPaths,
     },
-    selectedModel: DEFAULT_MODEL,
+    selectedModel: DEFAULT_TEST_MODEL,
     tokenCommand: TEST_TOKEN_COMMAND,
   });
 
@@ -156,7 +156,7 @@ test("planInstallConfigWrites only loads config files for the active scope layer
     paths: {
       ...testPaths,
     },
-    selectedModel: DEFAULT_MODEL,
+    selectedModel: DEFAULT_TEST_MODEL,
     tokenCommand: TEST_TOKEN_COMMAND,
   });
 
@@ -179,7 +179,7 @@ test("buildInstallConfigPlan keeps pure config merging separate from file loadin
     paths: {
       ...testPaths,
     },
-    selectedModel: DEFAULT_MODEL,
+    selectedModel: DEFAULT_TEST_MODEL,
     tokenCommand: TEST_TOKEN_COMMAND,
   });
 
@@ -193,19 +193,25 @@ test("buildInstallConfigPlan keeps pure config merging separate from file loadin
 
 test("createManagedTomlConfigWrite keeps TOML render and no-op comparison together", () => {
   const managedWrite = createManagedTomlConfigWrite({
-    model: DEFAULT_MODEL.modelId,
+    model: DEFAULT_TEST_MODEL.modelId,
   });
 
-  assert.equal(managedWrite.content, `model = "${DEFAULT_MODEL.modelId}"\n`);
+  assert.equal(
+    managedWrite.content,
+    `model = "${DEFAULT_TEST_MODEL.modelId}"\n`,
+  );
   assert.equal(
     managedWrite.contentComparator(
-      'model = "gpt-5.4"\r\n',
-      'model = "gpt-5.4"\n',
+      'model = "provider/live-codex-alpha"\r\n',
+      'model = "provider/live-codex-alpha"\n',
     ),
     true,
   );
   assert.equal(
-    areEquivalentTomlTexts('model = "gpt-5.4"\n', 'model = "gpt-5.3"\n'),
+    areEquivalentTomlTexts(
+      'model = "provider/live-codex-alpha"\n',
+      'model = "provider/live-codex-beta"\n',
+    ),
     false,
   );
 });

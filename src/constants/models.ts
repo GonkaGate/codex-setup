@@ -1,98 +1,92 @@
-import type { SupportedModelContractDefinition } from "../../contract-definitions.js";
-import { SUPPORTED_MODELS_CONTRACT } from "../../contract-definitions.js";
-import {
-  GONKAGATE_MODEL_CATALOG,
-  type ModelCatalog,
-  type ModelCatalogEntry,
-} from "./model-catalog.js";
+export type SupportedModelKey = string;
 
-export type SupportedModelDefinition = SupportedModelContractDefinition;
+export interface SupportedModel {
+  readonly displayName: string;
+  readonly key: SupportedModelKey;
+  readonly modelId: string;
+}
 
-const curatedModelRegistry = SUPPORTED_MODELS_CONTRACT;
+export interface ModelCatalogEntry {
+  readonly display_name: string;
+  readonly input_modalities: readonly ["text"];
+  readonly priority: number;
+  readonly shell_type: "shell_command";
+  readonly slug: string;
+  readonly supported_in_api: true;
+  readonly supported_reasoning_levels: readonly [];
+  readonly visibility: "list";
+}
 
-export const SUPPORTED_MODELS = curatedModelRegistry;
-export type SupportedModel = (typeof SUPPORTED_MODELS)[number];
-export type SupportedModelKey = SupportedModel["key"];
-export type SupportedModelId = SupportedModel["modelId"];
-export const DEFAULT_MODEL = requireDefaultSupportedModel(SUPPORTED_MODELS);
-export const DEFAULT_MODEL_KEY: SupportedModelKey = DEFAULT_MODEL.key;
-export const SUPPORTED_MODEL_KEYS: readonly SupportedModelKey[] =
-  SUPPORTED_MODELS.map((model) => model.key);
-export const SUPPORTED_MODEL_IDS: readonly SupportedModelId[] =
-  SUPPORTED_MODELS.map((model) => model.modelId);
+export interface ModelCatalog {
+  readonly models: readonly ModelCatalogEntry[];
+}
+
+export function createSupportedModel(
+  id: string,
+  name?: string,
+): SupportedModel {
+  const displayName = name && name.length > 0 ? name : id;
+
+  return {
+    displayName,
+    key: id,
+    modelId: id,
+  };
+}
+
+export function getDefaultSupportedModel(
+  models: readonly SupportedModel[],
+): SupportedModel {
+  const [defaultModel] = models;
+
+  if (!defaultModel) {
+    throw new Error("GonkaGate /v1/models returned no models.");
+  }
+
+  return defaultModel;
+}
 
 export function findSupportedModelByKey(
+  models: readonly SupportedModel[],
   key: string,
 ): SupportedModel | undefined {
-  return SUPPORTED_MODELS.find((model) => model.key === key);
+  return models.find((model) => model.key === key);
 }
 
-export function parseSupportedModelKey(
-  key: string,
-): SupportedModelKey | undefined {
-  return findSupportedModelByKey(key)?.key;
-}
-
-export function getSupportedModelByKey(key: SupportedModelKey): SupportedModel {
-  return requireSupportedModel(key);
-}
-
-export function requireSupportedModel(key: SupportedModelKey): SupportedModel {
-  const model = findSupportedModelByKey(key);
+export function requireSupportedModel(
+  models: readonly SupportedModel[],
+  key: SupportedModelKey,
+): SupportedModel {
+  const model = findSupportedModelByKey(models, key);
 
   if (!model) {
     throw new Error(
-      `Unsupported model key "${key}". Supported model keys: ${SUPPORTED_MODEL_KEYS.join(", ")}`,
+      `Unsupported GonkaGate model id "${key}". Fetched model ids: ${models
+        .map((supportedModel) => supportedModel.key)
+        .join(", ")}`,
     );
   }
 
   return model;
 }
 
-export function getCatalogEntryForModel(
-  modelId: SupportedModelId,
-): ModelCatalogEntry {
-  const modelEntry = GONKAGATE_MODEL_CATALOG.models.find(
-    (entry) => entry.slug === modelId,
-  );
-
-  if (!modelEntry) {
-    throw new Error(
-      `Curated model catalog does not contain metadata for "${modelId}".`,
-    );
-  }
-
-  return modelEntry;
-}
-
-export function createCuratedModelCatalog(): ModelCatalog {
-  const models = SUPPORTED_MODELS.map((model) =>
-    getCatalogEntryForModel(model.modelId),
-  );
-
+export function createModelCatalog(
+  models: readonly SupportedModel[],
+): ModelCatalog {
   if (models.length === 0) {
-    throw new Error("Curated model catalog must contain at least one model.");
+    throw new Error("GonkaGate /v1/models returned no models.");
   }
 
-  return { models };
-}
-
-function requireDefaultSupportedModel(
-  models: readonly SupportedModelDefinition[],
-): SupportedModel {
-  const defaultModels = models.filter((model) => model.isDefault === true);
-
-  if (defaultModels.length !== 1) {
-    throw new Error(
-      `Expected exactly one default supported model, found ${defaultModels.length}.`,
-    );
-  }
-
-  const [defaultModel] = defaultModels;
-
-  if (!defaultModel) {
-    throw new Error("Expected a default supported model to be configured.");
-  }
-
-  return defaultModel;
+  return {
+    models: models.map((model, index) => ({
+      display_name: model.displayName,
+      input_modalities: ["text"],
+      priority: index,
+      shell_type: "shell_command",
+      slug: model.modelId,
+      supported_in_api: true,
+      supported_reasoning_levels: [],
+      visibility: "list",
+    })),
+  };
 }

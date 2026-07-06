@@ -1,5 +1,5 @@
 import {
-  createCuratedModelCatalog,
+  createModelCatalog,
   type SupportedModel,
 } from "../constants/models.js";
 import {
@@ -40,6 +40,7 @@ export interface InstallWritePhase {
 
 export interface PlanInstallManagedWritesInput {
   apiKey: string;
+  availableModels: readonly SupportedModel[];
   finalScope: InstallScope;
   installPaths: InstallPaths;
   loadTomlConfig: (filePath: string) => Promise<LoadedTomlConfig>;
@@ -101,7 +102,7 @@ function planCatalogWritePhase(
       createWritePlan(
         "model_catalog",
         input.installPaths.modelCatalogPath,
-        `${JSON.stringify(createCuratedModelCatalog(), null, 2)}\n`,
+        `${JSON.stringify(createModelCatalog(input.availableModels), null, 2)}\n`,
         {
           mode: OWNER_READ_WRITE_MODE,
         },

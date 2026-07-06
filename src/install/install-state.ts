@@ -1,6 +1,5 @@
 import {
-  DEFAULT_MODEL_KEY,
-  SUPPORTED_MODELS,
+  getDefaultSupportedModel,
   requireSupportedModel,
   type SupportedModel,
 } from "../constants/models.js";
@@ -49,6 +48,7 @@ export type InstallSummary = UserInstallSummary | LocalInstallSummary;
 
 interface PreparedInstallContextBase {
   apiKey: string;
+  availableModels: readonly SupportedModel[];
   codex: CodexAvailability;
   installPaths: InstallPaths;
   requestedScope: InstallScope;
@@ -94,6 +94,7 @@ export async function prepareInstallPlan(
 
 interface ResolvedInstallInputs {
   apiKey: string;
+  availableModels: readonly SupportedModel[];
   codex: CodexAvailability;
   requestedScope: InstallScope;
   selectedModel: SupportedModel;
@@ -147,6 +148,7 @@ function createPreparedInstallContext(
 ): PreparedInstallContext {
   return {
     apiKey: resolvedInputs.apiKey,
+    availableModels: resolvedInputs.availableModels,
     codex: resolvedInputs.codex,
     installPaths,
     requestedScope: resolvedInputs.requestedScope,
@@ -162,6 +164,7 @@ async function planPreparedInstallWritePhases(
 ): Promise<InstallWritePhase[]> {
   return planInstallManagedWritePhases({
     apiKey: context.apiKey,
+    availableModels: context.availableModels,
     finalScope: context.finalScope,
     installPaths: context.installPaths,
     loadTomlConfig,
@@ -178,17 +181,17 @@ async function collectInstallInputs(
   const apiKey = inputDependencies.validateApiKey(
     await inputDependencies.promptForApiKey(),
   );
+  const availableModels = await inputDependencies.fetchGonkagateModels(apiKey);
+  const defaultModel = getDefaultSupportedModel(availableModels);
   const selectedModel = request.modelKey
-    ? requireSupportedModel(request.modelKey)
-    : await inputDependencies.promptForModel(
-        SUPPORTED_MODELS,
-        DEFAULT_MODEL_KEY,
-      );
+    ? requireSupportedModel(availableModels, request.modelKey)
+    : await inputDependencies.promptForModel(availableModels, defaultModel.key);
   const requestedScope =
     request.scope ?? (await inputDependencies.promptForScope("user"));
 
   return {
     apiKey,
+    availableModels,
     codex,
     requestedScope,
     selectedModel,

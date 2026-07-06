@@ -1,39 +1,29 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
-import { CONTRACT_METADATA } from "../contract-metadata.js";
 import {
-  SUPPORTED_MODELS,
-  createCuratedModelCatalog,
+  createModelCatalog,
+  createSupportedModel,
 } from "../src/constants/models.js";
 
-const repoRoot = fileURLToPath(new URL("../", import.meta.url));
-
-test("createCuratedModelCatalog includes every supported model", () => {
-  const curatedCatalog = createCuratedModelCatalog();
+test("createModelCatalog writes generic metadata for every fetched model", () => {
+  const liveModels = [
+    createSupportedModel("provider/live-codex-alpha", "Live Codex Alpha"),
+    createSupportedModel("provider/live-codex-beta"),
+  ];
+  const modelCatalog = createModelCatalog(liveModels);
 
   assert.deepEqual(
-    curatedCatalog.models.map((model) => model.slug),
-    SUPPORTED_MODELS.map((model) => model.modelId),
+    modelCatalog.models.map((model) => model.slug),
+    liveModels.map((model) => model.modelId),
   );
-  assert.equal(
-    curatedCatalog.models.length,
-    CONTRACT_METADATA.supportedModels.length,
+  assert.deepEqual(
+    modelCatalog.models.map((model) => model.display_name),
+    ["Live Codex Alpha", "provider/live-codex-beta"],
   );
-  assert.deepEqual(SUPPORTED_MODELS, CONTRACT_METADATA.supportedModels);
+  assert.equal(modelCatalog.models[0]?.supported_in_api, true);
+  assert.deepEqual(modelCatalog.models[0]?.input_modalities, ["text"]);
 });
 
-test("generated model-catalog artifact matches the committed source snapshot", () => {
-  const result = spawnSync(
-    process.execPath,
-    [resolve(repoRoot, "scripts/check-model-catalog.mjs")],
-    {
-      cwd: repoRoot,
-      encoding: "utf8",
-    },
-  );
-
-  assert.equal(result.status, 0, result.stderr || result.stdout);
+test("createModelCatalog rejects an empty live model list", () => {
+  assert.throws(() => createModelCatalog([]), /returned no models/);
 });

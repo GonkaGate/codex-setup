@@ -12,6 +12,8 @@ so the implementation is intentionally conservative.
 - Keep the secret under `~/.codex/...` with owner-only permissions.
 - Use a helper command plus Codex provider `auth` config instead of relying on
   exported env vars.
+- Fetch `GET https://api.gonkagate.com/v1/models` with bearer auth only after
+  the hidden key prompt and local key validation.
 - Preserve unrelated Codex config instead of overwriting the whole file.
 - Create backups before replacing existing managed config or token files.
 

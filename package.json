@@ -1,6 +1,6 @@
 {
   "name": "@gonkagate/codex-setup",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "CLI installer for configuring Codex CLI to use GonkaGate as a custom Responses API provider.",
   "homepage": "https://github.com/GonkaGate/codex-setup#readme",
   "bugs": {

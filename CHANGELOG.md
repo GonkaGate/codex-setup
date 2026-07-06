@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/GonkaGate/codex-setup/compare/v0.1.0...v0.2.0) (2026-07-06)
+
+
+### Features
+
+* fetch GonkaGate models dynamically ([113c86e](https://github.com/GonkaGate/codex-setup/commit/113c86e33538acb8f981fd820e3b050b6c9632ce))
+
+
+### Bug Fixes
+
+* align Codex Kimi context window with Gonka deployment ([4fa03ea](https://github.com/GonkaGate/codex-setup/commit/4fa03ea0b7113102c5243713d727777e9bb2fbb1))
+* align Codex Kimi context window with Gonka deployment ([2cb5818](https://github.com/GonkaGate/codex-setup/commit/2cb581877f90889a7617fbfd2fddb7357d658c31))
+
 ## [Unreleased]
 
 - Replaced the checked-in GonkaGate model allowlist with live
